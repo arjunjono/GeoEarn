@@ -1,0 +1,3000 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GeoEarn: the geo-arbitrage rate matrix for freelancers</title>
+<meta name="description" content="Work out the freelance rate you need in any city to keep your lifestyle and your savings." />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        navy:   { 950:'#0A192F', 900:'#0F172A', 800:'#152238', 700:'#1E293B', 600:'#334155' },
+        brand:  { 600:'#2563EB', 500:'#3B82F6', 400:'#60A5FA' },
+        money:  { 600:'#059669', 500:'#10B981' },
+        paper:  '#F8FAFC'
+      },
+      fontFamily: {
+        sans: ['"Plus Jakarta Sans"','ui-sans-serif','system-ui','sans-serif'],
+        mono: ['"IBM Plex Mono"','ui-monospace','monospace']
+      },
+      boxShadow: {
+        card: '0 1px 2px rgba(15,23,42,.04), 0 8px 24px -12px rgba(15,23,42,.16)',
+        hero: '0 24px 60px -28px rgba(10,25,47,.65)'
+      }
+    }
+  }
+}
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+  :root { color-scheme: light; }
+  html.dark { color-scheme: dark; }
+  body { -webkit-font-smoothing: antialiased; }
+
+  .tnum { font-variant-numeric: tabular-nums; }
+
+  /* Tab panels */
+  .panel { display: none; }
+  .panel.is-active { display: block; animation: rise .32s cubic-bezier(.22,.61,.36,1) both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+  /* Nav underline */
+  .navlink { position: relative; }
+  .navlink::after {
+    content: ''; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 2px;
+    background: #2563EB; border-radius: 2px; transform: scaleX(0); transform-origin: left;
+    transition: transform .28s cubic-bezier(.22,.61,.36,1);
+  }
+  .navlink[aria-selected="true"]::after { transform: scaleX(1); }
+
+  /* Range slider */
+  input[type=range] { -webkit-appearance: none; appearance: none; background: transparent; }
+  input[type=range]::-webkit-slider-runnable-track {
+    height: 6px; border-radius: 999px;
+    background: linear-gradient(90deg,#2563EB var(--fill,50%), rgba(148,163,184,.35) var(--fill,50%));
+  }
+  input[type=range]::-moz-range-track {
+    height: 6px; border-radius: 999px;
+    background: linear-gradient(90deg,#2563EB var(--fill,50%), rgba(148,163,184,.35) var(--fill,50%));
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none; width: 20px; height: 20px; margin-top: -7px;
+    border-radius: 999px; background: #fff; border: 3px solid #2563EB;
+    box-shadow: 0 2px 8px rgba(37,99,235,.4); cursor: grab;
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 20px; height: 20px; border-radius: 999px; background: #fff; border: 3px solid #2563EB;
+    box-shadow: 0 2px 8px rgba(37,99,235,.4); cursor: grab;
+  }
+  input[type=range]:active::-webkit-slider-thumb { cursor: grabbing; }
+
+  /* Map */
+  #map { height: 380px; border-radius: 14px; z-index: 0; }
+  .leaflet-container { background: transparent; font-family: '"Plus Jakarta Sans"', sans-serif; }
+  .leaflet-popup-content-wrapper { border-radius: 10px; }
+  .pin {
+    display:grid; place-items:center; width:30px; height:30px; border-radius:999px;
+    color:#fff; font-size:12px; font-weight:700; box-shadow:0 4px 14px rgba(10,25,47,.45);
+    border:2px solid rgba(255,255,255,.9);
+  }
+  .pin-a { background:#0F172A; }
+  .pin-b { background:#2563EB; }
+  .route { animation: dash 22s linear infinite; }
+  @keyframes dash { to { stroke-dashoffset: -600; } }
+
+  /* Chat */
+  .chat-scroll { scrollbar-width: thin; }
+  .chat-scroll::-webkit-scrollbar { width: 8px; }
+  .chat-scroll::-webkit-scrollbar-thumb { background: rgba(100,116,139,.35); border-radius: 999px; }
+  .typing span {
+    display:inline-block; width:6px; height:6px; border-radius:999px; background:currentColor; opacity:.4;
+    animation: blink 1.2s infinite;
+  }
+  .typing span:nth-child(2){ animation-delay:.2s } .typing span:nth-child(3){ animation-delay:.4s }
+  @keyframes blink { 0%,60%,100%{opacity:.25; transform:translateY(0)} 30%{opacity:1; transform:translateY(-3px)} }
+
+  /* Toast */
+  #toast { transition: opacity .25s ease, transform .25s ease; }
+
+  /* Focus visibility */
+  :focus-visible { outline: 2px solid #2563EB; outline-offset: 2px; border-radius: 6px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+  }
+
+  /* Living costs: keep the price columns readable on a phone */
+  @media (max-width: 430px) {
+    #livGrid .grid { grid-template-columns: 1fr 62px 62px 48px !important; gap: 6px !important; }
+  }
+
+  /* Auth gate */
+  #authGate { animation: fadeIn .3s ease both; }
+  @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+  .authcard { animation: rise .4s cubic-bezier(.22,.61,.36,1) both; }
+  .authtab[aria-selected="true"] { background: #fff; color: #0F172A; box-shadow: 0 1px 3px rgba(15,23,42,.12); }
+  html.dark .authtab[aria-selected="true"] { background: #1E293B; color: #fff; }
+  .shake { animation: shake .32s ease; }
+  @keyframes shake { 25%{transform:translateX(-5px)} 50%{transform:translateX(5px)} 75%{transform:translateX(-3px)} }
+
+  /* Print / PDF */
+  @media print {
+    body { background: #fff !important; color: #0F172A !important; }
+    .no-print, main { display: none !important; }
+    .print-only { display: block !important; }
+    .print-only table { break-inside: auto; }
+  }
+  .print-only { display: none; }
+</style>
+</head>
+
+<body class="bg-paper dark:bg-navy-950 text-navy-900 dark:text-slate-200 font-sans antialiased transition-colors duration-300">
+
+<!-- ═══════════════ SIGN IN GATE ═══════════════ -->
+<div id="authGate" class="fixed inset-0 z-[1100] bg-paper dark:bg-navy-950 overflow-y-auto">
+  <button id="gateTheme" class="absolute top-5 right-5 z-20 w-10 h-10 rounded-xl border border-slate-200 dark:border-navy-700 bg-white dark:bg-navy-800 hover:border-brand-600 transition grid place-items-center" aria-label="Switch between light and dark mode">
+    <i id="gateThemeIcon" class="fa-solid fa-moon text-slate-600 dark:text-brand-400"></i>
+  </button>
+  <div class="min-h-full grid lg:grid-cols-2">
+
+    <!-- Pitch -->
+    <div class="relative hidden lg:flex flex-col justify-between p-12 bg-navy-950 text-white overflow-hidden">
+      <div class="absolute inset-0 opacity-[0.14] pointer-events-none"
+           style="background-image:radial-gradient(circle at 1px 1px, #93C5FD 1px, transparent 0); background-size:26px 26px;"></div>
+      <div class="absolute -bottom-32 -left-20 w-96 h-96 rounded-full bg-brand-600/25 blur-3xl pointer-events-none"></div>
+
+      <div class="relative flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-brand-600 grid place-items-center"><i class="fa-solid fa-earth-americas text-white"></i></div>
+        <div class="font-extrabold tracking-tight text-lg">Geo<span class="text-brand-400">Earn</span></div>
+      </div>
+
+      <div class="relative max-w-md">
+        <h1 class="text-4xl xl:text-5xl font-extrabold tracking-tight leading-[1.08]">
+          Know the rate<br />before you book<br />the flight.
+        </h1>
+        <p class="mt-5 text-slate-300 leading-relaxed">
+          Set your income and your lifestyle, pick a destination, and GeoEarn works out the hourly rate that keeps both intact.
+        </p>
+        <div class="mt-8 space-y-3 text-sm">
+          <div class="flex items-center gap-3"><i class="fa-solid fa-check text-money-500 w-4"></i><span class="text-slate-300">32 cities with rent, tax, visa, and connectivity data</span></div>
+          <div class="flex items-center gap-3"><i class="fa-solid fa-check text-money-500 w-4"></i><span class="text-slate-300">Save routes and compare them side by side</span></div>
+          <div class="flex items-center gap-3"><i class="fa-solid fa-check text-money-500 w-4"></i><span class="text-slate-300">Export to CSV or a printable summary</span></div>
+        </div>
+      </div>
+
+      <p class="relative text-[11px] text-slate-500 max-w-sm leading-relaxed">
+        Your account lives in this browser. Nothing is sent anywhere, and no one else can read it, but it also cannot follow you to another device unless you export a backup.
+      </p>
+    </div>
+
+    <!-- Form -->
+    <div class="flex items-center justify-center p-6 sm:p-10">
+      <div class="authcard w-full max-w-sm">
+
+        <div class="lg:hidden flex items-center gap-3 mb-8">
+          <div class="w-9 h-9 rounded-xl bg-navy-900 dark:bg-brand-600 grid place-items-center"><i class="fa-solid fa-earth-americas text-white"></i></div>
+          <div class="font-extrabold tracking-tight text-lg">Geo<span class="text-brand-600 dark:text-brand-400">Earn</span></div>
+        </div>
+
+        <div class="flex p-1 rounded-xl bg-slate-100 dark:bg-navy-800 mb-7">
+          <button id="tabSignin" class="authtab flex-1 py-2 rounded-lg text-[13px] font-bold text-slate-500 dark:text-slate-400 transition" aria-selected="true">Sign in</button>
+          <button id="tabSignup" class="authtab flex-1 py-2 rounded-lg text-[13px] font-bold text-slate-500 dark:text-slate-400 transition" aria-selected="false">Create account</button>
+        </div>
+
+        <h2 id="authTitle" class="text-2xl font-extrabold tracking-tight">Welcome back</h2>
+        <p id="authSub" class="text-sm text-slate-500 dark:text-slate-400 mt-1 mb-6">Pick up where you left off.</p>
+
+        <div id="authForm" class="space-y-3.5">
+          <label id="rowName" class="hidden">
+            <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">Your name</span>
+            <input id="authName" type="text" autocomplete="name" placeholder="Alex Kim"
+              class="mt-1.5 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-navy-700 bg-slate-50 dark:bg-navy-800 text-sm focus:border-brand-600 focus:bg-white dark:focus:bg-navy-800 outline-none transition" />
+          </label>
+
+          <label class="block">
+            <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">Email</span>
+            <input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com"
+              class="mt-1.5 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-navy-700 bg-slate-50 dark:bg-navy-800 text-sm font-mono focus:border-brand-600 focus:bg-white outline-none transition" />
+          </label>
+
+          <label class="block">
+            <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">Password</span>
+            <div class="mt-1.5 relative">
+              <input id="authPass" type="password" autocomplete="current-password" placeholder="At least 8 characters"
+                class="w-full px-3.5 pr-11 py-2.5 rounded-xl border border-slate-200 dark:border-navy-700 bg-slate-50 dark:bg-navy-800 text-sm focus:border-brand-600 focus:bg-white outline-none transition" />
+              <button id="btnPeek" type="button" class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg grid place-items-center text-slate-400 hover:text-brand-600 transition" aria-label="Show password">
+                <i class="fa-regular fa-eye text-xs"></i>
+              </button>
+            </div>
+          </label>
+
+          <label id="rowPass2" class="hidden">
+            <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">Confirm password</span>
+            <input id="authPass2" type="password" autocomplete="new-password" placeholder="Type it again"
+              class="mt-1.5 w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-navy-700 bg-slate-50 dark:bg-navy-800 text-sm focus:border-brand-600 focus:bg-white outline-none transition" />
+          </label>
+
+          <div id="authErr" class="hidden rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 px-3.5 py-2.5 text-[12.5px] font-semibold text-red-600 dark:text-red-400"></div>
+
+          <button id="authSubmit" class="w-full py-3 rounded-xl bg-navy-900 dark:bg-brand-600 text-white text-sm font-bold hover:bg-navy-800 dark:hover:bg-brand-500 transition shadow-sm">
+            Sign in
+          </button>
+        </div>
+
+        <div id="authAccountsWrap" class="hidden mt-6">
+          <div class="text-[10px] uppercase tracking-[0.14em] font-bold text-slate-400 mb-2">Accounts on this browser</div>
+          <div id="authAccounts" class="space-y-1.5"></div>
+        </div>
+
+        <div class="flex items-center gap-3 my-6">
+          <div class="h-px flex-1 bg-slate-200 dark:bg-navy-800"></div>
+          <span class="text-[11px] font-semibold text-slate-400">or</span>
+          <div class="h-px flex-1 bg-slate-200 dark:bg-navy-800"></div>
+        </div>
+
+        <button id="btnGuest" class="w-full py-3 rounded-xl border border-slate-200 dark:border-navy-700 text-sm font-bold text-slate-600 dark:text-slate-300 hover:border-brand-600 hover:text-brand-600 transition">
+          Continue without an account
+        </button>
+
+        <p class="mt-6 text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
+          <i class="fa-solid fa-circle-info mr-1"></i>
+          There is no server behind this. Accounts are stored in this browser, so treat the password as a lock on the tab, not real security. Do not reuse one that matters.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════ HEADER ═══════════════ -->
+<header class="no-print sticky top-0 z-[900] backdrop-blur-xl bg-white/85 dark:bg-navy-900/85 border-b border-slate-200 dark:border-navy-700">
+  <div class="max-w-[1400px] mx-auto px-4 sm:px-6">
+    <div class="flex items-center justify-between h-16 gap-4">
+
+      <!-- Brand -->
+      <div class="flex items-center gap-3 shrink-0">
+        <div class="w-9 h-9 rounded-xl bg-navy-900 dark:bg-brand-600 grid place-items-center shadow-sm">
+          <i class="fa-solid fa-earth-americas text-white text-base"></i>
+        </div>
+        <div class="leading-tight">
+          <div class="font-extrabold tracking-tight text-[17px]">Geo<span class="text-brand-600 dark:text-brand-400">Earn</span></div>
+          <div class="text-[10px] uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400 font-semibold">Rate Matrix</div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <nav class="hidden lg:flex items-center gap-0.5" role="tablist" aria-label="Sections">
+        <button class="navlink px-2.5 py-2 text-[13.5px] font-semibold rounded-lg text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white transition whitespace-nowrap" role="tab" data-tab="matrix" aria-selected="true"><i class="fa-solid fa-table-cells-large mr-1.5 text-xs"></i>Matrix</button>
+        <button class="navlink px-2.5 py-2 text-[13.5px] font-semibold rounded-lg text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white transition whitespace-nowrap" role="tab" data-tab="living" aria-selected="false"><i class="fa-solid fa-basket-shopping mr-1.5 text-xs"></i>Living Costs</button>
+        <button class="navlink px-2.5 py-2 text-[13.5px] font-semibold rounded-lg text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white transition whitespace-nowrap" role="tab" data-tab="advisor" aria-selected="false"><i class="fa-solid fa-comments mr-1.5 text-xs"></i>Advisor</button>
+        <button class="navlink px-2.5 py-2 text-[13.5px] font-semibold rounded-lg text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white transition whitespace-nowrap" role="tab" data-tab="saved" aria-selected="false"><i class="fa-solid fa-bookmark mr-1.5 text-xs"></i>Saved</button>
+        <button class="navlink px-2.5 py-2 text-[13.5px] font-semibold rounded-lg text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white transition whitespace-nowrap" role="tab" data-tab="mission" aria-selected="false"><i class="fa-solid fa-flag mr-1.5 text-xs"></i>Mission</button>
+        <button class="navlink px-2.5 py-2 text-[13.5px] font-semibold rounded-lg text-slate-500 dark:text-slate-400 hover:text-navy-900 dark:hover:text-white transition whitespace-nowrap" role="tab" data-tab="profile" aria-selected="false"><i class="fa-solid fa-user-gear mr-1.5 text-xs"></i>Profile</button>
+      </nav>
+
+      <!-- Right side -->
+      <div class="flex items-center gap-2 shrink-0">
+        <div class="relative">
+          <button id="acctBtn" class="flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-full bg-slate-100 dark:bg-navy-800 border border-slate-200 dark:border-navy-700 hover:border-brand-600 transition" aria-haspopup="true" aria-expanded="false">
+            <span id="chipInitials" class="w-6 h-6 rounded-full bg-brand-600 text-white text-[11px] font-bold grid place-items-center">AK</span>
+            <span id="chipName" class="hidden sm:block text-xs font-semibold max-w-[120px] truncate">Alex Kim</span>
+            <i class="fa-solid fa-chevron-down text-[9px] text-slate-400"></i>
+          </button>
+          <div id="acctMenu" class="hidden absolute right-0 mt-2 w-64 rounded-xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-hero p-1.5 z-[950]">
+            <div class="px-3 py-2.5">
+              <div id="menuName" class="text-sm font-bold truncate">Alex Kim</div>
+              <div id="menuEmail" class="font-mono text-[11px] text-slate-500 truncate">you@example.com</div>
+            </div>
+            <div class="h-px bg-slate-100 dark:bg-navy-800 my-1"></div>
+            <button id="menuProfile" class="w-full text-left px-3 py-2 rounded-lg text-[13px] font-semibold hover:bg-slate-50 dark:hover:bg-navy-800 transition">
+              <i class="fa-solid fa-user-gear w-4 mr-1.5 text-slate-400"></i>Profile and preferences
+            </button>
+            <button id="menuSwitch" class="w-full text-left px-3 py-2 rounded-lg text-[13px] font-semibold hover:bg-slate-50 dark:hover:bg-navy-800 transition">
+              <i class="fa-solid fa-right-left w-4 mr-1.5 text-slate-400"></i>Switch account
+            </button>
+            <button id="menuLogout" class="w-full text-left px-3 py-2 rounded-lg text-[13px] font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition">
+              <i class="fa-solid fa-arrow-right-from-bracket w-4 mr-1.5"></i>Sign out
+            </button>
+          </div>
+        </div>
+        <button id="themeToggle" class="w-10 h-10 rounded-xl border border-slate-200 dark:border-navy-700 bg-white dark:bg-navy-800 hover:border-brand-600 dark:hover:border-brand-500 transition grid place-items-center" aria-label="Switch between light and dark mode">
+          <i id="themeIcon" class="fa-solid fa-moon text-slate-600 dark:text-brand-400"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Mobile tabs -->
+    <div class="lg:hidden flex items-center gap-1 overflow-x-auto pb-2 -mx-1 px-1" role="tablist">
+      <button class="navlink whitespace-nowrap px-3 py-2 text-[13px] font-semibold rounded-lg text-slate-500 dark:text-slate-400" role="tab" data-tab="matrix" aria-selected="true">Matrix</button>
+      <button class="navlink whitespace-nowrap px-3 py-2 text-[13px] font-semibold rounded-lg text-slate-500 dark:text-slate-400" role="tab" data-tab="living" aria-selected="false">Living Costs</button>
+      <button class="navlink whitespace-nowrap px-3 py-2 text-[13px] font-semibold rounded-lg text-slate-500 dark:text-slate-400" role="tab" data-tab="advisor" aria-selected="false">Advisor</button>
+      <button class="navlink whitespace-nowrap px-3 py-2 text-[13px] font-semibold rounded-lg text-slate-500 dark:text-slate-400" role="tab" data-tab="saved" aria-selected="false">Saved</button>
+      <button class="navlink whitespace-nowrap px-3 py-2 text-[13px] font-semibold rounded-lg text-slate-500 dark:text-slate-400" role="tab" data-tab="mission" aria-selected="false">Mission</button>
+      <button class="navlink whitespace-nowrap px-3 py-2 text-[13px] font-semibold rounded-lg text-slate-500 dark:text-slate-400" role="tab" data-tab="profile" aria-selected="false">Profile</button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
+
+<!-- ═══════════════ TAB: SPATIAL MATRIX ═══════════════ -->
+<section id="panel-matrix" class="panel is-active" role="tabpanel">
+
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+    <!-- Inputs -->
+    <aside class="lg:col-span-4 xl:col-span-3">
+      <div class="rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card p-5 lg:sticky lg:top-24">
+        <div class="flex items-center justify-between mb-5">
+          <h2 class="text-sm font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Your numbers</h2>
+          <button id="btnReset" class="text-[11px] font-semibold text-slate-400 hover:text-brand-600 transition"><i class="fa-solid fa-rotate-left mr-1"></i>Reset</button>
+        </div>
+
+        <label class="block mb-4">
+          <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">Annual income before tax</span>
+          <div class="mt-1.5 relative">
+            <span id="incomeSym" class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm">$</span>
+            <input id="income" type="number" min="0" step="1000" value="120000"
+              class="w-full pl-7 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-navy-700 bg-slate-50 dark:bg-navy-800 font-mono text-sm tnum focus:border-brand-600 focus:bg-white dark:focus:bg-navy-800 outline-none transition" />
+          </div>
+        </label>
+
+        <label class="block mb-4">
+          <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">Current hourly rate</span>
+          <div class="mt-1.5 relative">
+            <span id="rateSym" class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm">$</span>
+            <input id="hourly" type="number" min="1" step="5" value="85"
+              class="w-full pl-7 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-navy-700 bg-slate-50 dark:bg-navy-800 font-mono text-sm tnum focus:border-brand-600 focus:bg-white outline-none transition" />
+          </div>
+          <span id="hoursNote" class="mt-1 block text-[11px] text-slate-400 font-mono">≈ 1,412 billable hours a year</span>
+        </label>
+
+        <div class="grid grid-cols-1 gap-4 mb-4">
+          <label class="block">
+            <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">Living now in</span>
+            <select id="origin" class="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-navy-700 bg-slate-50 dark:bg-navy-800 text-sm font-semibold focus:border-brand-600 outline-none transition"></select>
+          </label>
+          <div class="flex justify-center -my-2">
+            <button id="btnSwap" class="w-8 h-8 rounded-full border border-slate-200 dark:border-navy-700 bg-white dark:bg-navy-800 text-slate-400 hover:text-brand-600 hover:border-brand-600 transition grid place-items-center" title="Swap cities" aria-label="Swap origin and destination">
+              <i class="fa-solid fa-arrow-down-up-across-line text-[11px]"></i>
+            </button>
+          </div>
+          <label class="block">
+            <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">Moving to</span>
+            <select id="dest" class="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-navy-700 bg-slate-50 dark:bg-navy-800 text-sm font-semibold focus:border-brand-600 outline-none transition"></select>
+          </label>
+        </div>
+
+        <div class="mb-5">
+          <div class="flex items-baseline justify-between mb-2">
+            <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">Lifestyle</span>
+            <span id="lifestyleLabel" class="text-[11px] font-bold text-brand-600 dark:text-brand-400">Comfortable</span>
+          </div>
+          <input id="lifestyle" type="range" min="60" max="160" step="5" value="100" class="w-full" aria-label="Lifestyle level" />
+          <div class="flex justify-between text-[10px] uppercase tracking-wider text-slate-400 font-semibold mt-1.5">
+            <span>Lean</span><span>Comfortable</span><span>Premium</span>
+          </div>
+        </div>
+
+        <button id="btnSaveQuick" class="w-full py-3 rounded-xl bg-navy-900 dark:bg-brand-600 text-white text-sm font-bold hover:bg-navy-800 dark:hover:bg-brand-500 transition shadow-sm">
+          <i class="fa-solid fa-bookmark mr-1.5"></i>Save this route
+        </button>
+        <p class="mt-3 text-[10.5px] leading-relaxed text-slate-400 dark:text-slate-500">
+          Figures come from a built-in illustrative dataset, not a live feed. Check current rents and tax rules before you commit to a move.
+        </p>
+      </div>
+    </aside>
+
+    <!-- Results -->
+    <div class="lg:col-span-8 xl:col-span-9 space-y-5">
+
+      <!-- Hero -->
+      <div class="print-card rounded-2xl bg-navy-950 dark:bg-navy-900 text-white shadow-hero overflow-hidden relative border border-navy-800">
+        <div class="absolute inset-0 opacity-[0.14] pointer-events-none"
+             style="background-image:radial-gradient(circle at 1px 1px, #93C5FD 1px, transparent 0); background-size:26px 26px;"></div>
+        <div class="absolute -top-24 -right-16 w-72 h-72 rounded-full bg-brand-600/25 blur-3xl pointer-events-none"></div>
+
+        <div class="relative p-6 sm:p-8">
+          <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div class="text-[11px] uppercase tracking-[0.18em] text-brand-400 font-bold mb-2">
+                <span id="heroRoute">New York → Lisbon</span>
+              </div>
+              <div class="flex items-end gap-2">
+                <span id="heroCur" class="text-2xl font-mono text-slate-400 mb-2">$</span>
+                <span id="heroRate" class="font-mono font-semibold text-6xl sm:text-7xl tracking-tighter tnum leading-none">54</span>
+                <span class="text-lg text-slate-400 font-semibold mb-2">/hr</span>
+              </div>
+              <p class="mt-3 text-sm text-slate-300 max-w-md leading-relaxed">
+                The hourly rate that keeps your lifestyle and your savings intact after the move.
+                <span class="block mt-1 text-slate-400">Today you charge <span id="heroOld" class="font-mono text-white">$85</span>/hr.</span>
+              </p>
+            </div>
+
+            <div id="arbBadge" class="shrink-0 rounded-xl bg-money-600/15 border border-money-500/40 px-4 py-3 min-w-[168px]">
+              <div class="flex items-center gap-2 text-money-500 text-[11px] font-bold uppercase tracking-wider">
+                <i id="arbIcon" class="fa-solid fa-arrow-trend-down"></i><span id="arbLabel">Arbitrage gain</span>
+              </div>
+              <div id="arbValue" class="font-mono text-3xl font-semibold mt-1 tnum text-white">36%</div>
+              <div id="arbSub" class="text-[11px] text-slate-400 mt-0.5">room below your current rate</div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-7">
+            <div class="rounded-xl bg-white/[0.06] border border-white/10 p-3.5">
+              <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Monthly cost there</div>
+              <div id="statCost" class="font-mono text-xl font-semibold mt-1 tnum">$2,140</div>
+            </div>
+            <div class="rounded-xl bg-white/[0.06] border border-white/10 p-3.5">
+              <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Savings preserved</div>
+              <div id="statSave" class="font-mono text-xl font-semibold mt-1 tnum text-money-500">$31,200</div>
+            </div>
+            <div class="rounded-xl bg-white/[0.06] border border-white/10 p-3.5">
+              <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Effective tax</div>
+              <div id="statTax" class="font-mono text-xl font-semibold mt-1 tnum">24%</div>
+            </div>
+            <div class="rounded-xl bg-white/[0.06] border border-white/10 p-3.5">
+              <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Cost of living</div>
+              <div id="statCol" class="font-mono text-xl font-semibold mt-1 tnum">−44%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Map + Chart -->
+      <div class="grid grid-cols-1 xl:grid-cols-12 gap-5">
+        <div class="xl:col-span-7 print-card rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card p-5">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="font-bold text-[15px]">The route</h3>
+              <p id="mapSub" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">5,470 km apart · 5 hours of time zone drift</p>
+            </div>
+            <button id="btnFit" class="no-print text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-navy-700 text-slate-500 hover:text-brand-600 hover:border-brand-600 transition">
+              <i class="fa-solid fa-crosshairs mr-1"></i>Recenter
+            </button>
+          </div>
+          <div id="map"></div>
+        </div>
+
+        <div class="xl:col-span-5 print-card rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card p-5">
+          <h3 class="font-bold text-[15px]">Where the money goes</h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 mb-4">Monthly, at your lifestyle setting</p>
+          <div class="h-[300px]"><canvas id="expenseChart"></canvas></div>
+          <div id="chartLegend" class="mt-4 grid grid-cols-2 gap-2 text-[11px]"></div>
+        </div>
+      </div>
+
+      <!-- City comparison strip -->
+      <div class="print-card rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-100 dark:border-navy-800">
+          <h3 class="font-bold text-[15px]">Side by side</h3>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-[10px] uppercase tracking-wider text-slate-400 font-bold border-b border-slate-100 dark:border-navy-800">
+                <th class="text-left px-5 py-2.5 font-bold">Measure</th>
+                <th id="thOrigin" class="text-right px-5 py-2.5 font-bold">New York</th>
+                <th id="thDest" class="text-right px-5 py-2.5 font-bold text-brand-600 dark:text-brand-400">Lisbon</th>
+                <th class="text-right px-5 py-2.5 font-bold">Change</th>
+              </tr>
+            </thead>
+            <tbody id="cmpBody" class="font-mono tnum"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════ TAB: LIVING COSTS ═══════════════ -->
+<section id="panel-living" class="panel" role="tabpanel">
+
+  <div class="rounded-2xl bg-navy-950 dark:bg-navy-900 text-white shadow-hero border border-navy-800 overflow-hidden relative mb-5">
+    <div class="absolute inset-0 opacity-[0.14] pointer-events-none"
+         style="background-image:radial-gradient(circle at 1px 1px, #93C5FD 1px, transparent 0); background-size:26px 26px;"></div>
+    <div class="absolute -top-24 -left-16 w-72 h-72 rounded-full bg-money-600/20 blur-3xl pointer-events-none"></div>
+
+    <div class="relative p-6 sm:p-8">
+      <div class="text-[11px] uppercase tracking-[0.18em] text-brand-400 font-bold mb-2">Everyday prices</div>
+      <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight">
+        What life actually costs in <span id="livCity" class="text-brand-400">Lisbon</span>
+      </h2>
+      <p class="mt-3 text-sm text-slate-300 max-w-2xl leading-relaxed">
+        Rent and tax decide whether a move is possible. Everything below decides whether it feels good.
+        Every price sits next to what the same thing costs in <span id="livOriginName" class="text-white font-semibold">New York</span> today.
+      </p>
+
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-7">
+        <div class="rounded-xl bg-white/[0.06] border border-white/10 p-3.5">
+          <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Monthly essentials</div>
+          <div id="livBasket" class="font-mono text-xl font-semibold mt-1 tnum">$0</div>
+          <div id="livBasketDelta" class="text-[11px] font-semibold text-money-500 mt-0.5">0%</div>
+        </div>
+        <div class="rounded-xl bg-white/[0.06] border border-white/10 p-3.5">
+          <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Cost to land</div>
+          <div id="livSetup" class="font-mono text-xl font-semibold mt-1 tnum">$0</div>
+          <div class="text-[11px] text-slate-400 mt-0.5">furniture, tech, appliances</div>
+        </div>
+        <div class="rounded-xl bg-white/[0.06] border border-white/10 p-3.5">
+          <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Biggest saving</div>
+          <div id="livDrop" class="font-mono text-xl font-semibold mt-1 text-money-500">Services</div>
+          <div id="livDropVal" class="text-[11px] text-slate-400 mt-0.5">0%</div>
+        </div>
+        <div class="rounded-xl bg-white/[0.06] border border-white/10 p-3.5">
+          <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Barely moves</div>
+          <div id="livJump" class="font-mono text-xl font-semibold mt-1 text-amber-400">Tech</div>
+          <div id="livJumpVal" class="text-[11px] text-slate-400 mt-0.5">0%</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rounded-2xl bg-brand-600/[0.06] dark:bg-brand-600/10 border border-brand-600/20 p-5 mb-5">
+    <div class="flex items-start gap-3">
+      <i class="fa-solid fa-lightbulb text-brand-600 dark:text-brand-400 mt-0.5"></i>
+      <div>
+        <div class="font-bold text-sm">The rule that catches people out</div>
+        <p id="livRule" class="text-[13px] leading-relaxed text-slate-600 dark:text-slate-300 mt-1">
+          Anything that arrives in a shipping container costs roughly the same everywhere. Anything done by a person is where the money actually moves.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card p-4 mb-5 sticky top-[76px] z-[500]">
+    <div class="flex flex-wrap items-center gap-3">
+      <div class="relative flex-1 min-w-[180px]">
+        <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-xs text-slate-400"></i>
+        <input id="livSearch" type="text" placeholder="Find an item"
+          class="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-navy-700 bg-slate-50 dark:bg-navy-800 text-sm focus:border-brand-600 outline-none transition" />
+      </div>
+      <div class="flex p-1 rounded-xl bg-slate-100 dark:bg-navy-800 shrink-0">
+        <button id="modePrice" class="authtab px-3.5 py-1.5 rounded-lg text-[12px] font-bold text-slate-500 dark:text-slate-400 transition" aria-selected="true">Price</button>
+        <button id="modeHours" class="authtab px-3.5 py-1.5 rounded-lg text-[12px] font-bold text-slate-500 dark:text-slate-400 transition" aria-selected="false">Hours of work</button>
+      </div>
+    </div>
+    <div id="livCats" class="flex flex-wrap gap-1.5 mt-3"></div>
+  </div>
+
+  <div id="livGrid" class="grid grid-cols-1 xl:grid-cols-2 gap-5"></div>
+
+  <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-5 leading-relaxed max-w-3xl">
+    Every item is split into five cost drivers: traded goods, local labour, premises, local retail and energy.
+    Each city prices those drivers differently, and items with their own economics carry an adjustment on top: alcohol duty,
+    fuel subsidy, vehicle tax, medical pricing, and so on. That is why two things in the same category move by different amounts.
+    Calibration sources are credited on the Mission tab. These figures show the shape of a difference, not a receipt.
+  </p>
+</section>
+
+<!-- ═══════════════ TAB: ADVISOR ═══════════════ -->
+<section id="panel-advisor" class="panel" role="tabpanel">
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+    <!-- Chat -->
+    <div class="lg:col-span-7">
+      <div class="rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card flex flex-col h-[640px] overflow-hidden">
+
+        <div class="px-5 py-4 border-b border-slate-100 dark:border-navy-800 flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-navy-900 dark:bg-brand-600 grid place-items-center shrink-0">
+            <i class="fa-solid fa-compass-drafting text-white text-sm"></i>
+          </div>
+          <div class="min-w-0">
+            <div class="font-bold text-[15px] leading-tight">Nomad tax &amp; rate advisor</div>
+            <div class="text-[11px] text-slate-500 dark:text-slate-400">
+              <span class="inline-block w-1.5 h-1.5 rounded-full bg-money-500 mr-1 align-middle"></span>
+              Every answer is computed from the local dataset, so nothing leaves your browser
+            </div>
+          </div>
+          <button id="btnClearChat" class="ml-auto text-[11px] font-semibold text-slate-400 hover:text-brand-600 transition shrink-0">Clear</button>
+        </div>
+
+        <div id="chatLog" class="chat-scroll flex-1 overflow-y-auto px-5 py-5 space-y-4"></div>
+
+        <div class="px-5 pt-3.5 pb-4 border-t border-slate-100 dark:border-navy-800">
+          <div class="flex items-center gap-2 mb-2.5">
+            <span class="text-[10px] uppercase tracking-[0.14em] font-bold text-slate-400">Pick a question</span>
+            <span class="h-px flex-1 bg-slate-100 dark:bg-navy-800"></span>
+          </div>
+          <div id="chips" class="flex flex-wrap gap-2"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Insight cards -->
+    <div class="lg:col-span-5 space-y-4">
+
+      <div class="rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card p-5">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <div class="text-[10px] uppercase tracking-[0.16em] text-slate-400 font-bold">Destination</div>
+            <h3 id="insCity" class="text-2xl font-extrabold tracking-tight mt-1">Lisbon</h3>
+            <p id="insCountry" class="text-xs text-slate-500 dark:text-slate-400">Portugal · Europe</p>
+          </div>
+          <div id="insTierBadge" class="rounded-lg px-3 py-2 text-center bg-money-600/10 border border-money-600/30">
+            <div class="text-[9px] uppercase tracking-wider font-bold text-money-600">Tax tier</div>
+            <div id="insTier" class="font-mono font-semibold text-lg text-money-600">Mid</div>
+          </div>
+        </div>
+        <div class="grid grid-cols-3 gap-2 mt-4">
+          <div class="rounded-xl bg-slate-50 dark:bg-navy-800 p-3">
+            <div class="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Rent index</div>
+            <div id="insRent" class="font-mono font-semibold text-base mt-0.5 tnum">31</div>
+          </div>
+          <div class="rounded-xl bg-slate-50 dark:bg-navy-800 p-3">
+            <div class="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Everyday</div>
+            <div id="insCpi" class="font-mono font-semibold text-base mt-0.5 tnum">54</div>
+          </div>
+          <div class="rounded-xl bg-slate-50 dark:bg-navy-800 p-3">
+            <div class="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Health &amp; transit</div>
+            <div id="insHealth" class="font-mono font-semibold text-base mt-0.5 tnum">42</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card p-5">
+        <div class="flex items-center gap-2 mb-3">
+          <i class="fa-solid fa-passport text-brand-600 dark:text-brand-400"></i>
+          <h4 class="font-bold text-sm">Digital nomad visa</h4>
+        </div>
+        <div id="insVisaName" class="font-semibold text-sm">D8 Digital Nomad Visa</div>
+        <p id="insVisaNote" class="text-[13px] leading-relaxed text-slate-600 dark:text-slate-300 mt-1.5">Requires proof of remote income roughly four times the local minimum wage.</p>
+        <div class="mt-3 pt-3 border-t border-slate-100 dark:border-navy-800 flex items-center justify-between">
+          <span class="text-xs text-slate-500 dark:text-slate-400">Income floor to qualify</span>
+          <span id="insVisaIncome" class="font-mono font-semibold text-sm tnum">$3,480/mo</span>
+        </div>
+      </div>
+
+      <div class="rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card p-5">
+        <div class="flex items-center gap-2 mb-3">
+          <i class="fa-solid fa-wifi text-brand-600 dark:text-brand-400"></i>
+          <h4 class="font-bold text-sm">Connectivity</h4>
+        </div>
+        <div class="flex items-end gap-2">
+          <span id="insSpeed" class="font-mono font-semibold text-3xl tnum">142</span>
+          <span class="text-xs text-slate-500 mb-1.5">Mbps median fixed line</span>
+        </div>
+        <div class="mt-3 h-2 rounded-full bg-slate-100 dark:bg-navy-800 overflow-hidden">
+          <div id="insSpeedBar" class="h-full bg-brand-600 rounded-full transition-all duration-500" style="width:58%"></div>
+        </div>
+        <p id="insSpeedNote" class="text-[11px] text-slate-500 dark:text-slate-400 mt-2">Comfortable for video calls and large file handoffs.</p>
+      </div>
+
+      <div class="rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card p-5">
+        <div class="flex items-center gap-2 mb-1">
+          <i class="fa-solid fa-map-location-dot text-brand-600 dark:text-brand-400"></i>
+          <h4 class="font-bold text-sm">Cheaper nearby</h4>
+        </div>
+        <p class="text-[11px] text-slate-500 dark:text-slate-400 mb-3">Same region, lower monthly burn. Click to load one.</p>
+        <div id="insAlts" class="space-y-2"></div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ TAB: SAVED AND EXPORT ═══════════════ -->
+<section id="panel-saved" class="panel" role="tabpanel">
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+    <div class="lg:col-span-8">
+      <div class="rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-100 dark:border-navy-800 flex items-center justify-between gap-3">
+          <div>
+            <h3 class="font-bold text-[15px]">Saved scenarios</h3>
+            <p id="savedCount" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Nothing saved yet</p>
+          </div>
+          <button id="btnSaveCurrent" class="px-3.5 py-2 rounded-xl bg-navy-900 dark:bg-brand-600 text-white text-xs font-bold hover:bg-navy-800 dark:hover:bg-brand-500 transition">
+            <i class="fa-solid fa-plus mr-1"></i>Save current
+          </button>
+        </div>
+        <div id="savedList" class="divide-y divide-slate-100 dark:divide-navy-800"></div>
+      </div>
+    </div>
+
+    <div class="lg:col-span-4 space-y-4">
+      <div class="rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card p-5">
+        <h3 class="font-bold text-[15px] mb-1">Take it with you</h3>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">Export the scenario you have open on the Matrix tab.</p>
+        <div class="space-y-2.5">
+          <button id="btnCsvOne" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-200 dark:border-navy-700 hover:border-brand-600 hover:bg-brand-600/5 transition text-left">
+            <i class="fa-solid fa-file-csv text-money-600 text-lg w-5"></i>
+            <span><span class="block text-sm font-semibold">Current scenario as CSV</span><span class="block text-[11px] text-slate-500">One row per line item</span></span>
+          </button>
+          <button id="btnCsvAll" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-200 dark:border-navy-700 hover:border-brand-600 hover:bg-brand-600/5 transition text-left">
+            <i class="fa-solid fa-table-list text-money-600 text-lg w-5"></i>
+            <span><span class="block text-sm font-semibold">All saved scenarios as CSV</span><span class="block text-[11px] text-slate-500">One row per scenario</span></span>
+          </button>
+          <button id="btnPrint" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-200 dark:border-navy-700 hover:border-brand-600 hover:bg-brand-600/5 transition text-left">
+            <i class="fa-solid fa-file-pdf text-brand-600 text-lg w-5"></i>
+            <span><span class="block text-sm font-semibold">Printable summary</span><span class="block text-[11px] text-slate-500">Opens your print dialog, then save as PDF</span></span>
+          </button>
+          <button id="btnJson" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-200 dark:border-navy-700 hover:border-brand-600 hover:bg-brand-600/5 transition text-left">
+            <i class="fa-solid fa-code text-slate-500 text-lg w-5"></i>
+            <span><span class="block text-sm font-semibold">Backup file (JSON)</span><span class="block text-[11px] text-slate-500">Scenarios plus preferences</span></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card p-5">
+        <h4 class="font-bold text-sm mb-3">Storage</h4>
+        <div class="flex items-center justify-between text-xs mb-2">
+          <span class="text-slate-500 dark:text-slate-400">Saved in this browser</span>
+          <span id="storeState" class="font-mono font-semibold">Active</span>
+        </div>
+        <p class="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+          Scenarios live in this browser only. Clearing site data removes them, so export a backup before you switch machines.
+        </p>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+<!-- ═══════════════ TAB: PROFILE ═══════════════ -->
+<section id="panel-profile" class="panel" role="tabpanel">
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+    <div class="lg:col-span-4">
+      <div class="rounded-2xl bg-navy-950 dark:bg-navy-900 text-white shadow-hero border border-navy-800 p-6 text-center">
+        <div id="avatar" class="w-20 h-20 rounded-2xl bg-brand-600 grid place-items-center mx-auto text-2xl font-extrabold shadow-lg">AK</div>
+        <h3 id="pvName" class="text-xl font-bold mt-4">Alex Kim</h3>
+        <p id="pvRole" class="text-sm text-slate-400">Product designer</p>
+        <p id="pvEmail" class="font-mono text-[11px] text-brand-400 mt-1 truncate">you@example.com</p>
+        <div class="grid grid-cols-2 gap-3 mt-6 text-left">
+          <div class="rounded-xl bg-white/[0.06] border border-white/10 p-3">
+            <div class="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Base currency</div>
+            <div id="pvCur" class="font-mono font-semibold mt-0.5">USD</div>
+          </div>
+          <div class="rounded-xl bg-white/[0.06] border border-white/10 p-3">
+            <div class="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Tax residence</div>
+            <div id="pvTax" class="font-mono font-semibold mt-0.5 truncate">USA</div>
+          </div>
+          <div class="rounded-xl bg-white/[0.06] border border-white/10 p-3">
+            <div class="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Scenarios saved</div>
+            <div id="pvCount" class="font-mono font-semibold mt-0.5">0</div>
+          </div>
+          <div class="rounded-xl bg-white/[0.06] border border-white/10 p-3">
+            <div class="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Member since</div>
+            <div id="pvSince" class="font-mono font-semibold mt-0.5">Not set</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="lg:col-span-8 space-y-4">
+      <div class="rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card p-6">
+        <h3 class="font-bold text-[15px] mb-1">Account</h3>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mb-5">Kept in this browser. Changes save as you type.</p>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <label class="block">
+            <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">Name</span>
+            <input id="prName" type="text" value="Alex Kim" class="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-navy-700 bg-slate-50 dark:bg-navy-800 text-sm focus:border-brand-600 outline-none transition" />
+          </label>
+          <label class="block">
+            <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">What you do</span>
+            <input id="prRole" type="text" value="Product designer" placeholder="e.g. Backend engineer" class="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-navy-700 bg-slate-50 dark:bg-navy-800 text-sm focus:border-brand-600 outline-none transition" />
+          </label>
+          <label class="block">
+            <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">Base currency</span>
+            <select id="prCurrency" class="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-navy-700 bg-slate-50 dark:bg-navy-800 text-sm font-semibold focus:border-brand-600 outline-none transition"></select>
+          </label>
+          <label class="block">
+            <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">Tax residence</span>
+            <select id="prTaxHome" class="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-navy-700 bg-slate-50 dark:bg-navy-800 text-sm font-semibold focus:border-brand-600 outline-none transition"></select>
+          </label>
+        </div>
+      </div>
+
+      <div class="rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card p-6">
+        <h3 class="font-bold text-[15px] mb-5">Preferences</h3>
+
+        <div class="flex items-center justify-between py-3 border-b border-slate-100 dark:border-navy-800">
+          <div>
+            <div class="text-sm font-semibold">Dark mode</div>
+            <div class="text-[11px] text-slate-500 dark:text-slate-400">Also switches the map tiles</div>
+          </div>
+          <button id="prTheme" class="relative w-12 h-7 rounded-full bg-slate-200 dark:bg-brand-600 transition" role="switch" aria-checked="false" aria-label="Dark mode">
+            <span id="prThemeKnob" class="absolute top-1 left-1 w-5 h-5 rounded-full bg-white shadow transition-transform"></span>
+          </button>
+        </div>
+
+        <div class="flex items-center justify-between py-3 border-b border-slate-100 dark:border-navy-800">
+          <div>
+            <div class="text-sm font-semibold">Round rates up</div>
+            <div class="text-[11px] text-slate-500 dark:text-slate-400">Show whole numbers you can quote out loud</div>
+          </div>
+          <button id="prRound" class="relative w-12 h-7 rounded-full bg-brand-600 transition" role="switch" aria-checked="true" aria-label="Round rates up">
+            <span id="prRoundKnob" class="absolute top-1 left-1 w-5 h-5 rounded-full bg-white shadow transition-transform translate-x-5"></span>
+          </button>
+        </div>
+
+        <div class="py-4">
+          <div class="flex items-baseline justify-between mb-2">
+            <div>
+              <div class="text-sm font-semibold">Annual savings target</div>
+              <div class="text-[11px] text-slate-500 dark:text-slate-400">Used to flag scenarios that fall short</div>
+            </div>
+            <span id="prTargetVal" class="font-mono font-semibold text-brand-600 dark:text-brand-400 tnum">$24,000</span>
+          </div>
+          <input id="prTarget" type="range" min="0" max="120000" step="2000" value="24000" class="w-full" aria-label="Annual savings target" />
+        </div>
+
+        <div class="pt-4 border-t border-slate-100 dark:border-navy-800 flex flex-wrap gap-2">
+          <button id="btnWipe" class="px-4 py-2.5 rounded-xl border border-red-200 dark:border-red-900/60 text-red-600 dark:text-red-400 text-xs font-bold hover:bg-red-50 dark:hover:bg-red-950/40 transition">
+            <i class="fa-solid fa-trash-can mr-1.5"></i>Erase everything stored
+          </button>
+          <button id="btnDemo" class="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-navy-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:border-brand-600 hover:text-brand-600 transition">
+            <i class="fa-solid fa-wand-magic-sparkles mr-1.5"></i>Load sample scenarios
+          </button>
+        </div>
+      </div>
+
+      <div class="rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card p-6">
+        <h3 class="font-bold text-[15px] mb-1">Sign-in details</h3>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mb-5">Stored in this browser only. There is no password reset. If you forget it, the account has to be deleted and rebuilt.</p>
+
+        <div class="flex flex-wrap items-center gap-x-8 gap-y-3 pb-5 mb-5 border-b border-slate-100 dark:border-navy-800">
+          <div>
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Signed in as</div>
+            <div id="acctEmail" class="font-mono text-sm font-semibold mt-0.5">you@example.com</div>
+          </div>
+          <div>
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Account created</div>
+            <div id="acctSince" class="font-mono text-sm font-semibold mt-0.5">Not set</div>
+          </div>
+        </div>
+
+        <div id="guestNotice" class="hidden rounded-xl bg-brand-600/5 border border-brand-600/20 p-4 mb-5">
+          <div class="text-sm font-bold">You're browsing as a guest</div>
+          <p class="text-[12.5px] text-slate-600 dark:text-slate-300 mt-1 mb-3">Your scenarios are saved, but they sit in a shared guest slot that anyone using this browser can open.</p>
+          <button id="btnUpgrade" class="px-4 py-2.5 rounded-xl bg-navy-900 dark:bg-brand-600 text-white text-xs font-bold hover:opacity-90 transition">
+            <i class="fa-solid fa-user-plus mr-1.5"></i>Create an account and keep this data
+          </button>
+        </div>
+
+        <div id="pwBlock" class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+          <label class="block">
+            <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">Current password</span>
+            <input id="pwCurrent" type="password" autocomplete="current-password" class="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-navy-700 bg-slate-50 dark:bg-navy-800 text-sm focus:border-brand-600 outline-none transition" />
+          </label>
+          <label class="block">
+            <span class="text-xs font-semibold text-slate-600 dark:text-slate-300">New password</span>
+            <input id="pwNew" type="password" autocomplete="new-password" class="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-navy-700 bg-slate-50 dark:bg-navy-800 text-sm focus:border-brand-600 outline-none transition" />
+          </label>
+          <div class="sm:col-span-2">
+            <button id="btnChangePw" class="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-navy-700 text-xs font-bold hover:border-brand-600 hover:text-brand-600 transition">
+              <i class="fa-solid fa-key mr-1.5"></i>Update password
+            </button>
+          </div>
+        </div>
+
+        <div class="pt-5 border-t border-slate-100 dark:border-navy-800 flex flex-wrap gap-2">
+          <button id="btnSignOut" class="px-4 py-2.5 rounded-xl bg-navy-900 dark:bg-brand-600 text-white text-xs font-bold hover:opacity-90 transition">
+            <i class="fa-solid fa-arrow-right-from-bracket mr-1.5"></i>Sign out
+          </button>
+          <button id="btnDeleteAcct" class="px-4 py-2.5 rounded-xl border border-red-200 dark:border-red-900/60 text-red-600 dark:text-red-400 text-xs font-bold hover:bg-red-50 dark:hover:bg-red-950/40 transition">
+            <i class="fa-solid fa-user-slash mr-1.5"></i>Delete this account
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ TAB: MISSION ═══════════════ -->
+<section id="panel-mission" class="panel" role="tabpanel">
+
+  <div class="rounded-2xl bg-navy-950 dark:bg-navy-900 text-white shadow-hero border border-navy-800 overflow-hidden relative">
+    <div class="absolute inset-0 opacity-[0.14] pointer-events-none"
+         style="background-image:radial-gradient(circle at 1px 1px, #93C5FD 1px, transparent 0); background-size:26px 26px;"></div>
+    <div class="absolute -bottom-32 -right-20 w-96 h-96 rounded-full bg-brand-600/25 blur-3xl pointer-events-none"></div>
+
+    <div class="relative p-8 sm:p-12 max-w-3xl">
+      <div class="text-[11px] uppercase tracking-[0.18em] text-brand-400 font-bold mb-4">Why GeoEarn exists</div>
+      <h2 class="text-4xl sm:text-5xl font-extrabold tracking-tight leading-[1.06]">
+        Moving country should not be a guess.
+      </h2>
+      <p class="mt-6 text-lg text-slate-300 leading-relaxed">
+        More people than ever earn their living from a laptop and can, in theory, do it from anywhere.
+        In practice almost nobody can answer the one question that decides whether the move works:
+        if I go there, what does my work need to be worth?
+      </p>
+      <p class="mt-4 text-slate-400 leading-relaxed">
+        GeoEarn answers it in about forty seconds, then shows the working.
+      </p>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mt-5">
+    <div class="rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card p-6">
+      <div class="w-10 h-10 rounded-xl bg-amber-500/10 grid place-items-center mb-4"><i class="fa-solid fa-puzzle-piece text-amber-500"></i></div>
+      <h3 class="font-bold text-[15px]">The answer is scattered</h3>
+      <p class="text-[13px] leading-relaxed text-slate-600 dark:text-slate-300 mt-2">
+        Rent sits on a listings site, tax on a government page written for accountants, visa rules in a PDF, and the honest version of daily life in a forum thread from 2019.
+        Nobody assembles them, so most people move on vibes and a screenshot of an apartment.
+      </p>
+    </div>
+    <div class="rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card p-6">
+      <div class="w-10 h-10 rounded-xl bg-brand-600/10 grid place-items-center mb-4"><i class="fa-solid fa-tag text-brand-600 dark:text-brand-400"></i></div>
+      <h3 class="font-bold text-[15px]">One rate, quoted everywhere</h3>
+      <p class="text-[13px] leading-relaxed text-slate-600 dark:text-slate-300 mt-2">
+        Freelancers price their work once and carry that number across borders.
+        Some quietly lose money after a move. Others leave a large amount of freedom on the table because they never checked how far the same rate stretches somewhere else.
+      </p>
+    </div>
+    <div class="rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card p-6">
+      <div class="w-10 h-10 rounded-xl bg-money-600/10 grid place-items-center mb-4"><i class="fa-solid fa-comment-dots text-money-600"></i></div>
+      <h3 class="font-bold text-[15px]">Averages hide the truth</h3>
+      <p class="text-[13px] leading-relaxed text-slate-600 dark:text-slate-300 mt-2">
+        A single cost of living percentage tells you nothing useful.
+        Rent might halve while your laptop, your phone and your flights cost the same or more. What changes and what does not is the whole story.
+      </p>
+    </div>
+  </div>
+
+  <div class="rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card p-8 sm:p-12 mt-5 text-center">
+    <div class="text-[11px] uppercase tracking-[0.18em] text-slate-400 font-bold mb-5">What we believe</div>
+    <p class="text-2xl sm:text-3xl font-extrabold tracking-tight leading-snug max-w-3xl mx-auto">
+      Location changes what money buys.<br class="hidden sm:block" />
+      It does not change what your work is worth.
+    </p>
+    <p class="mt-5 text-[15px] text-slate-600 dark:text-slate-300 max-w-2xl mx-auto leading-relaxed">
+      The gap between those two facts is where the opportunity sits.
+      GeoEarn measures that gap precisely, in the only unit a freelancer actually negotiates with: an hourly rate.
+    </p>
+  </div>
+
+  <div class="mt-5 rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card overflow-hidden">
+    <div class="px-6 sm:px-8 pt-7 pb-2">
+      <h3 class="text-xl font-extrabold tracking-tight">How it works</h3>
+      <p class="text-[13px] text-slate-500 dark:text-slate-400 mt-1">Three steps, in this order, because each one depends on the last.</p>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-slate-100 dark:divide-navy-800">
+      <div class="p-6 sm:p-8">
+        <div class="font-mono text-3xl font-semibold text-brand-600 dark:text-brand-400">01</div>
+        <h4 class="font-bold text-[15px] mt-3">Describe the life you have</h4>
+        <p class="text-[13px] leading-relaxed text-slate-600 dark:text-slate-300 mt-2">
+          Your income, your rate, your city, and how comfortably you live on it.
+          From that we work out what you actually spend and what you actually keep, which is the part every generic calculator skips.
+        </p>
+      </div>
+      <div class="p-6 sm:p-8">
+        <div class="font-mono text-3xl font-semibold text-brand-600 dark:text-brand-400">02</div>
+        <h4 class="font-bold text-[15px] mt-3">Point at somewhere new</h4>
+        <p class="text-[13px] leading-relaxed text-slate-600 dark:text-slate-300 mt-2">
+          We rebuild that same life in the destination: rent at your standard, groceries, transport, healthcare, and the local tax bite.
+          Nothing is downgraded to make the numbers look good.
+        </p>
+      </div>
+      <div class="p-6 sm:p-8">
+        <div class="font-mono text-3xl font-semibold text-brand-600 dark:text-brand-400">03</div>
+        <h4 class="font-bold text-[15px] mt-3">Read the gap</h4>
+        <p class="text-[13px] leading-relaxed text-slate-600 dark:text-slate-300 mt-2">
+          Out comes one number: the hourly rate that keeps your lifestyle and your savings exactly where they are.
+          The distance between that and what you charge today is your room to move.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">
+    <div class="rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card p-6 sm:p-8">
+      <h3 class="text-xl font-extrabold tracking-tight">What we measure</h3>
+      <p class="text-[13px] text-slate-500 dark:text-slate-400 mt-1 mb-5">Eight dimensions per city, because a single index is not a decision.</p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5">
+        <div class="flex gap-3"><i class="fa-solid fa-house text-brand-600 dark:text-brand-400 w-4 mt-0.5"></i><div><div class="text-[13px] font-bold">Housing</div><div class="text-[12px] text-slate-500 dark:text-slate-400">Rent at your standard, centre and outside it</div></div></div>
+        <div class="flex gap-3"><i class="fa-solid fa-basket-shopping text-brand-600 dark:text-brand-400 w-4 mt-0.5"></i><div><div class="text-[13px] font-bold">Everyday prices</div><div class="text-[12px] text-slate-500 dark:text-slate-400">Close to eighty items, from a litre of milk to a television</div></div></div>
+        <div class="flex gap-3"><i class="fa-solid fa-scale-balanced text-brand-600 dark:text-brand-400 w-4 mt-0.5"></i><div><div class="text-[13px] font-bold">Effective tax</div><div class="text-[12px] text-slate-500 dark:text-slate-400">What a solo freelancer really loses, not the headline band</div></div></div>
+        <div class="flex gap-3"><i class="fa-solid fa-passport text-brand-600 dark:text-brand-400 w-4 mt-0.5"></i><div><div class="text-[13px] font-bold">Visa route</div><div class="text-[12px] text-slate-500 dark:text-slate-400">The permit that fits, and the income floor to clear it</div></div></div>
+        <div class="flex gap-3"><i class="fa-solid fa-heart-pulse text-brand-600 dark:text-brand-400 w-4 mt-0.5"></i><div><div class="text-[13px] font-bold">Health and transport</div><div class="text-[12px] text-slate-500 dark:text-slate-400">Cover, appointments, and getting across town</div></div></div>
+        <div class="flex gap-3"><i class="fa-solid fa-wifi text-brand-600 dark:text-brand-400 w-4 mt-0.5"></i><div><div class="text-[13px] font-bold">Connectivity</div><div class="text-[12px] text-slate-500 dark:text-slate-400">Median speeds, because your income depends on them</div></div></div>
+        <div class="flex gap-3"><i class="fa-solid fa-clock text-brand-600 dark:text-brand-400 w-4 mt-0.5"></i><div><div class="text-[13px] font-bold">Time zone drift</div><div class="text-[12px] text-slate-500 dark:text-slate-400">How far your working day moves away from your clients</div></div></div>
+        <div class="flex gap-3"><i class="fa-solid fa-map-location-dot text-brand-600 dark:text-brand-400 w-4 mt-0.5"></i><div><div class="text-[13px] font-bold">Nearby alternatives</div><div class="text-[12px] text-slate-500 dark:text-slate-400">Cheaper bases within reach of the same region</div></div></div>
+      </div>
+    </div>
+
+    <div class="rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card p-6 sm:p-8">
+      <h3 class="text-xl font-extrabold tracking-tight">Who it is built for</h3>
+      <p class="text-[13px] text-slate-500 dark:text-slate-400 mt-1 mb-5">Three people with the same question and no good way to answer it.</p>
+      <div class="space-y-4">
+        <div class="flex gap-4">
+          <div class="w-10 h-10 rounded-xl bg-brand-600/10 grid place-items-center shrink-0"><i class="fa-solid fa-laptop-code text-brand-600 dark:text-brand-400"></i></div>
+          <div><div class="text-[14px] font-bold">The freelancer with one client and an idea</div>
+          <p class="text-[12.5px] leading-relaxed text-slate-600 dark:text-slate-300 mt-1">Wants to know whether leaving an expensive city means a pay cut, or simply a better life at the same rate.</p></div>
+        </div>
+        <div class="flex gap-4">
+          <div class="w-10 h-10 rounded-xl bg-money-600/10 grid place-items-center shrink-0"><i class="fa-solid fa-graduation-cap text-money-600"></i></div>
+          <div><div class="text-[14px] font-bold">The graduate choosing a first base</div>
+          <p class="text-[12.5px] leading-relaxed text-slate-600 dark:text-slate-300 mt-1">Has a remote offer and no instinct yet for what a salary is worth once rent, tax and a visa are taken out of it.</p></div>
+        </div>
+        <div class="flex gap-4">
+          <div class="w-10 h-10 rounded-xl bg-amber-500/10 grid place-items-center shrink-0"><i class="fa-solid fa-people-roof text-amber-500"></i></div>
+          <div><div class="text-[14px] font-bold">The family weighing a real move</div>
+          <p class="text-[12.5px] leading-relaxed text-slate-600 dark:text-slate-300 mt-1">Cares less about the arbitrage and more about school fees, healthcare, and what a weekly shop costs on the ground.</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">
+    <div class="rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card p-6 sm:p-8">
+      <h3 class="text-xl font-extrabold tracking-tight">What we will not pretend</h3>
+      <p class="text-[13px] text-slate-500 dark:text-slate-400 mt-1 mb-5">A tool about money is only useful if it is honest about its own limits.</p>
+      <div class="space-y-3">
+        <div class="flex gap-3"><i class="fa-solid fa-circle-check text-money-600 w-4 mt-0.5"></i><p class="text-[13px] leading-relaxed text-slate-600 dark:text-slate-300"><span class="font-bold text-navy-900 dark:text-white">The dataset is modelled, not live.</span> Every figure is an informed estimate built from published indices. Confirm rent and tax before you sign anything.</p></div>
+        <div class="flex gap-3"><i class="fa-solid fa-circle-check text-money-600 w-4 mt-0.5"></i><p class="text-[13px] leading-relaxed text-slate-600 dark:text-slate-300"><span class="font-bold text-navy-900 dark:text-white">This is not tax advice.</span> Effective rates stand in for a real filing position, which depends on residency, treaties and how you invoice.</p></div>
+        <div class="flex gap-3"><i class="fa-solid fa-circle-check text-money-600 w-4 mt-0.5"></i><p class="text-[13px] leading-relaxed text-slate-600 dark:text-slate-300"><span class="font-bold text-navy-900 dark:text-white">Nothing is collected.</span> There is no server, no analytics and no account database. Your scenarios never leave the browser you typed them into.</p></div>
+        <div class="flex gap-3"><i class="fa-solid fa-circle-check text-money-600 w-4 mt-0.5"></i><p class="text-[13px] leading-relaxed text-slate-600 dark:text-slate-300"><span class="font-bold text-navy-900 dark:text-white">The advisor is not a chatbot.</span> It answers a fixed set of questions from the dataset, so it can never invent a number to sound helpful.</p></div>
+      </div>
+    </div>
+
+    <div class="rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card p-6 sm:p-8">
+      <h3 class="text-xl font-extrabold tracking-tight">Where this goes next</h3>
+      <p class="text-[13px] text-slate-500 dark:text-slate-400 mt-1 mb-5">The single file version proves the idea. These are the next four steps.</p>
+      <div class="space-y-3">
+        <div class="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-navy-800">
+          <span class="px-2 py-0.5 rounded-md bg-money-600/15 text-money-600 text-[10px] font-bold uppercase tracking-wider shrink-0 mt-0.5">Next</span>
+          <div><div class="text-[13px] font-bold">Live price feeds</div><div class="text-[12px] text-slate-500 dark:text-slate-400">Replace the modelled dataset with rent listings and grocery data refreshed monthly.</div></div>
+        </div>
+        <div class="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-navy-800">
+          <span class="px-2 py-0.5 rounded-md bg-brand-600/15 text-brand-600 dark:text-brand-400 text-[10px] font-bold uppercase tracking-wider shrink-0 mt-0.5">Soon</span>
+          <div><div class="text-[13px] font-bold">Household mode</div><div class="text-[12px] text-slate-500 dark:text-slate-400">Two incomes, children, school fees and dependant visa rules in the same calculation.</div></div>
+        </div>
+        <div class="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-navy-800">
+          <span class="px-2 py-0.5 rounded-md bg-brand-600/15 text-brand-600 dark:text-brand-400 text-[10px] font-bold uppercase tracking-wider shrink-0 mt-0.5">Soon</span>
+          <div><div class="text-[13px] font-bold">A first year timeline</div><div class="text-[12px] text-slate-500 dark:text-slate-400">Flights, deposits, visa fees and setup costs spread across month one to twelve.</div></div>
+        </div>
+        <div class="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-navy-800">
+          <span class="px-2 py-0.5 rounded-md bg-slate-200 dark:bg-navy-700 text-slate-500 dark:text-slate-300 text-[10px] font-bold uppercase tracking-wider shrink-0 mt-0.5">Later</span>
+          <div><div class="text-[13px] font-bold">Coverage past the hubs</div><div class="text-[12px] text-slate-500 dark:text-slate-400">Two hundred cities, including the second cities that are usually the better answer.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card p-6 sm:p-8 mt-5">
+    <div class="flex flex-wrap items-start justify-between gap-4 mb-5">
+      <div>
+        <h3 class="text-xl font-extrabold tracking-tight">Where the numbers come from</h3>
+        <p class="text-[13px] text-slate-500 dark:text-slate-400 mt-1 max-w-2xl">
+          GeoEarn does not redistribute anybody else's dataset. The city indices and the item level price model are ours,
+          and they are calibrated against these public references.
+        </p>
+      </div>
+      <span class="px-3 py-1.5 rounded-lg bg-brand-600/10 text-brand-600 dark:text-brand-400 text-[11px] font-bold uppercase tracking-wider shrink-0">Calibration sources</span>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+      <div class="flex gap-3">
+        <i class="fa-solid fa-landmark text-brand-600 dark:text-brand-400 w-4 mt-1"></i>
+        <div>
+          <a href="https://www.worldbank.org/en/programs/icp/data" target="_blank" rel="noopener" class="text-[13.5px] font-bold hover:text-brand-600 transition">World Bank International Comparison Program</a>
+          <p class="text-[12.5px] leading-relaxed text-slate-600 dark:text-slate-300 mt-1">
+            The 2021 cycle publishes price level indices for 176 economies across 45 separate expenditure headings.
+            That structure is the reason GeoEarn prices each category on its own drivers rather than one blended index.
+          </p>
+        </div>
+      </div>
+
+      <div class="flex gap-3">
+        <i class="fa-solid fa-city text-brand-600 dark:text-brand-400 w-4 mt-1"></i>
+        <div>
+          <a href="https://www.numbeo.com/cost-of-living/cpi_explained.jsp" target="_blank" rel="noopener" class="text-[13.5px] font-bold hover:text-brand-600 transition">Numbeo cost of living indices</a>
+          <p class="text-[12.5px] leading-relaxed text-slate-600 dark:text-slate-300 mt-1">
+            Crowd sourced city level indices built on a New York equals 100 baseline. GeoEarn follows the same convention
+            for its rent, everyday and health indices so the two are readable side by side.
+          </p>
+        </div>
+      </div>
+
+      <div class="flex gap-3">
+        <i class="fa-solid fa-scale-unbalanced text-brand-600 dark:text-brand-400 w-4 mt-1"></i>
+        <div>
+          <a href="https://data.worldbank.org/indicator/PA.NUS.PPP" target="_blank" rel="noopener" class="text-[13.5px] font-bold hover:text-brand-600 transition">Purchasing power parity conversion factors</a>
+          <p class="text-[12.5px] leading-relaxed text-slate-600 dark:text-slate-300 mt-1">
+            Maintained by the World Bank with the OECD and Eurostat PPP programmes. Used to sanity check that the ratios
+            between regions stay in a believable range rather than drifting on their own.
+          </p>
+        </div>
+      </div>
+
+      <div class="flex gap-3">
+        <i class="fa-solid fa-gauge-high text-brand-600 dark:text-brand-400 w-4 mt-1"></i>
+        <div>
+          <div class="text-[13.5px] font-bold">Speed rankings and government visa pages</div>
+          <p class="text-[12.5px] leading-relaxed text-slate-600 dark:text-slate-300 mt-1">
+            Median fixed line speeds follow publicly reported national broadband rankings. Every visa route, and the income
+            floor attached to it, comes from the issuing country's own published guidance.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-6 pt-5 border-t border-slate-100 dark:border-navy-800">
+      <div class="text-[13px] font-bold mb-2">How a single price is built</div>
+      <p class="text-[12.5px] leading-relaxed text-slate-600 dark:text-slate-300">
+        Each of the 79 tracked items is split into five cost drivers: traded goods, local labour, premises, local retail and energy.
+        A television is almost entirely traded goods, so it barely moves between cities. A haircut is almost entirely labour, so it moves enormously.
+        On top of that, items with their own local economics carry a specific adjustment: alcohol duty, fuel subsidy, vehicle tax, medical pricing,
+        mobile and broadband competition, and produce that grows locally in one place and is flown into another.
+        Two things in the same category therefore give different answers, which is the whole point.
+      </p>
+    </div>
+  </div>
+
+  <div class="rounded-2xl bg-navy-950 dark:bg-navy-900 text-white shadow-hero border border-navy-800 p-8 sm:p-10 mt-5 text-center relative overflow-hidden">
+    <div class="absolute inset-0 opacity-[0.14] pointer-events-none"
+         style="background-image:radial-gradient(circle at 1px 1px, #93C5FD 1px, transparent 0); background-size:26px 26px;"></div>
+    <p class="relative text-xl sm:text-2xl font-extrabold tracking-tight max-w-2xl mx-auto leading-snug">
+      The cost of a life is knowable. It just was not written down in one place until now.
+    </p>
+    <div class="relative grid grid-cols-2 sm:grid-cols-4 gap-4 mt-8 max-w-2xl mx-auto">
+      <div><div class="font-mono text-3xl font-semibold text-brand-400" id="missCities">32</div><div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold mt-1">Cities</div></div>
+      <div><div class="font-mono text-3xl font-semibold text-brand-400" id="missItems">70</div><div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold mt-1">Prices tracked</div></div>
+      <div><div class="font-mono text-3xl font-semibold text-money-500">0</div><div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold mt-1">Servers</div></div>
+      <div><div class="font-mono text-3xl font-semibold text-money-500">1</div><div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold mt-1">File</div></div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<div class="print-only max-w-[1400px] mx-auto px-6">
+  <div>
+    <h1 style="font-size:22px;font-weight:800;margin-bottom:4px;">GeoEarn rate summary</h1>
+    <p id="printMeta" style="font-size:12px;color:#475569;margin-bottom:12px;"></p>
+    <div id="printBody" style="font-size:13px;"></div>
+  </div>
+</div>
+
+<footer class="no-print border-t border-slate-200 dark:border-navy-800 mt-8">
+  <div class="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 flex flex-wrap items-center justify-between gap-3 text-[11px] text-slate-500 dark:text-slate-400">
+    <span>GeoEarn · <span id="cityCount">32</span> cities in the dataset · everything runs in your browser</span>
+    <span>Illustrative figures. Confirm tax and visa rules with a professional before moving.</span>
+  </div>
+</footer>
+
+<div id="toast" class="no-print fixed bottom-6 left-1/2 -translate-x-1/2 translate-y-4 opacity-0 pointer-events-none z-[1000] px-5 py-3 rounded-xl bg-navy-900 dark:bg-white text-white dark:text-navy-900 text-sm font-semibold shadow-hero">
+  Saved
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   GeoEarn: single file, no backend, no build step.
+   Indices are relative to New York = 100. Illustrative dataset.
+   ═══════════════════════════════════════════════════════════════ */
+
+const CITIES = [
+  { id:'new-york', city:'New York', country:'United States', region:'North America', lat:40.7128, lng:-74.0060,
+    rent:100, cpi:100, tax:0.32, health:100, net:210,
+    visa:{ name:'No nomad visa (domestic base)', note:'Self-employment tax plus federal and state filing. State choice moves the number more than anything else.', income:0 },
+    alts:['toronto','mexico-city','medellin'] },
+  { id:'san-francisco', city:'San Francisco', country:'United States', region:'North America', lat:37.7749, lng:-122.4194,
+    rent:96, cpi:98, tax:0.34, health:102, net:230,
+    visa:{ name:'No nomad visa (domestic base)', note:'Highest combined state and city burden of the US hubs, offset by the deepest client pool.', income:0 },
+    alts:['mexico-city','toronto','medellin'] },
+  { id:'toronto', city:'Toronto', country:'Canada', region:'North America', lat:43.6532, lng:-79.3832,
+    rent:62, cpi:78, tax:0.30, health:68, net:165,
+    visa:{ name:'Visitor status, 6 months', note:'No dedicated nomad permit. Public healthcare after provincial registration, so private cover costs little.', income:0 },
+    alts:['mexico-city','medellin','buenos-aires'] },
+  { id:'mexico-city', city:'Mexico City', country:'Mexico', region:'Latin America', lat:19.4326, lng:-99.1332,
+    rent:26, cpi:42, tax:0.22, health:32, net:95,
+    visa:{ name:'Temporary Resident Visa', note:'Show roughly six months of bank statements above the income floor. Granted for one year, renewable to four.', income:4400 },
+    alts:['medellin','buenos-aires','tbilisi'] },
+  { id:'medellin', city:'Medellín', country:'Colombia', region:'Latin America', lat:6.2442, lng:-75.5812,
+    rent:18, cpi:33, tax:0.20, health:24, net:120,
+    visa:{ name:'V Nomad Digital Visa', note:'Two years, foreign-earned income only. Health cover for the full stay is required at application.', income:1000 },
+    alts:['buenos-aires','mexico-city','tbilisi'] },
+  { id:'buenos-aires', city:'Buenos Aires', country:'Argentina', region:'Latin America', lat:-34.6037, lng:-58.3816,
+    rent:17, cpi:31, tax:0.21, health:22, net:88,
+    visa:{ name:'Digital Nomad Visa', note:'180 days, renewable once. Currency swings move your real cost of living month to month.', income:1000 },
+    alts:['medellin','mexico-city','tbilisi'] },
+  { id:'london', city:'London', country:'United Kingdom', region:'Europe', lat:51.5074, lng:-0.1278,
+    rent:78, cpi:85, tax:0.33, health:72, net:145,
+    visa:{ name:'No nomad visa', note:'Self-assessment plus National Insurance. Rent eats the largest share of any European hub here.', income:0 },
+    alts:['lisbon','warsaw','athens'] },
+  { id:'berlin', city:'Berlin', country:'Germany', region:'Europe', lat:52.5200, lng:13.4050,
+    rent:48, cpi:70, tax:0.34, health:58, net:130,
+    visa:{ name:'Freiberufler (freelance) visa', note:'Needs client letters of intent and proof of health insurance. Registration appointments book out months ahead.', income:2800 },
+    alts:['warsaw','lisbon','tallinn'] },
+  { id:'lisbon', city:'Lisbon', country:'Portugal', region:'Europe', lat:38.7223, lng:-9.1393,
+    rent:34, cpi:56, tax:0.26, health:42, net:142,
+    visa:{ name:'D8 Digital Nomad Visa', note:'Remote income around four times the local minimum wage, plus a registered lease or address.', income:3480 },
+    alts:['athens','warsaw','istanbul'] },
+  { id:'paris', city:'Paris', country:'France', region:'Europe', lat:48.8566, lng:2.3522,
+    rent:62, cpi:79, tax:0.35, health:60, net:175,
+    visa:{ name:'Profession Libérale visa', note:'Business plan and viability proof required. Social contributions land on top of income tax.', income:3200 },
+    alts:['lisbon','warsaw','athens'] },
+  { id:'amsterdam', city:'Amsterdam', country:'Netherlands', region:'Europe', lat:52.3676, lng:4.9041,
+    rent:66, cpi:80, tax:0.36, health:66, net:155,
+    visa:{ name:'DAFT (US citizens) / self-employed permit', note:'The Dutch-American treaty route needs a modest business deposit. Housing supply is the real constraint.', income:2600 },
+    alts:['berlin','warsaw','tallinn'] },
+  { id:'barcelona', city:'Barcelona', country:'Spain', region:'Europe', lat:41.3874, lng:2.1686,
+    rent:42, cpi:62, tax:0.28, health:48, net:150,
+    visa:{ name:'Spain Digital Nomad Visa', note:'Up to five years. A reduced flat tax rate applies for the first four years if you qualify.', income:2760 },
+    alts:['lisbon','athens','warsaw'] },
+  { id:'zurich', city:'Zurich', country:'Switzerland', region:'Europe', lat:47.3769, lng:8.5417,
+    rent:88, cpi:118, tax:0.24, health:108, net:190,
+    visa:{ name:'Self-employed residence permit', note:'Low headline tax, but mandatory private health cover and groceries make it the most expensive city here.', income:5500 },
+    alts:['warsaw','lisbon','tallinn'] },
+  { id:'warsaw', city:'Warsaw', country:'Poland', region:'Europe', lat:52.2297, lng:21.0122,
+    rent:26, cpi:45, tax:0.19, health:32, net:160,
+    visa:{ name:'Poland Business Harbour', note:'Built for IT freelancers. A flat lump-sum tax option suits software and design work.', income:1600 },
+    alts:['tallinn','tbilisi','istanbul'] },
+  { id:'prague', city:'Prague', country:'Czechia', region:'Europe', lat:50.0755, lng:14.4378,
+    rent:30, cpi:50, tax:0.18, health:38, net:135,
+    visa:{ name:'Živnostenský (trade licence) visa', note:'The flat-rate regime keeps admin light once the trade licence is issued.', income:1900 },
+    alts:['warsaw','tallinn','athens'] },
+  { id:'tallinn', city:'Tallinn', country:'Estonia', region:'Europe', lat:59.4370, lng:24.7536,
+    rent:27, cpi:52, tax:0.20, health:36, net:120,
+    visa:{ name:'Estonia Digital Nomad Visa', note:'Up to one year. E-residency handles company paperwork entirely online.', income:4500 },
+    alts:['warsaw','tbilisi','athens'] },
+  { id:'athens', city:'Athens', country:'Greece', region:'Europe', lat:37.9838, lng:23.7275,
+    rent:24, cpi:48, tax:0.24, health:34, net:92,
+    visa:{ name:'Greece Digital Nomad Visa', note:'A 50% income tax discount is available for seven years if you relocate your tax residence.', income:3900 },
+    alts:['istanbul','tbilisi','warsaw'] },
+  { id:'istanbul', city:'Istanbul', country:'Türkiye', region:'Europe', lat:41.0082, lng:28.9784,
+    rent:20, cpi:35, tax:0.20, health:24, net:75,
+    visa:{ name:'Digital Nomad Permit', note:'Open to under-55s with a degree. Inflation reprices rent faster than any other city listed.', income:3000 },
+    alts:['tbilisi','athens','warsaw'] },
+  { id:'tbilisi', city:'Tbilisi', country:'Georgia', region:'Europe', lat:41.7151, lng:44.8271,
+    rent:16, cpi:30, tax:0.01, health:20, net:82,
+    visa:{ name:'Remotely from Georgia / 1-year visa-free', note:'Small-business status taxes turnover at roughly 1% up to a generous ceiling. The cheapest legal setup on this list.', income:2000 },
+    alts:['istanbul','warsaw','athens'] },
+  { id:'tokyo', city:'Tokyo', country:'Japan', region:'Asia', lat:35.6762, lng:139.6503,
+    rent:44, cpi:68, tax:0.28, health:52, net:200,
+    visa:{ name:'Japan Digital Nomad Visa', note:'Six months, no extension, and it needs private health insurance covering the full stay.', income:8300 },
+    alts:['seoul','kuala-lumpur','bangkok'] },
+  { id:'singapore', city:'Singapore', country:'Singapore', region:'Asia', lat:1.3521, lng:103.8198,
+    rent:82, cpi:82, tax:0.15, health:66, net:250,
+    visa:{ name:'ONE Pass / Employment Pass', note:'No nomad visa. Low tax and excellent infrastructure, but rent is the second highest here.', income:9000 },
+    alts:['kuala-lumpur','bangkok','ho-chi-minh'] },
+  { id:'hong-kong', city:'Hong Kong', country:'Hong Kong SAR', region:'Asia', lat:22.3193, lng:114.1694,
+    rent:74, cpi:76, tax:0.13, health:58, net:205,
+    visa:{ name:'Top Talent Pass', note:'Territorial tax means foreign-sourced income often falls outside the net. Housing is the trade-off.', income:7000 },
+    alts:['bangkok','kuala-lumpur','ho-chi-minh'] },
+  { id:'seoul', city:'Seoul', country:'South Korea', region:'Asia', lat:37.5665, lng:126.9780,
+    rent:40, cpi:64, tax:0.24, health:46, net:195,
+    visa:{ name:'Workation (F-1-D) visa', note:'Two years for remote workers meeting the income floor. Jeonse deposits are the housing quirk to plan for.', income:6500 },
+    alts:['bangkok','kuala-lumpur','chiang-mai'] },
+  { id:'bangkok', city:'Bangkok', country:'Thailand', region:'Asia', lat:13.7563, lng:100.5018,
+    rent:22, cpi:38, tax:0.17, health:26, net:165,
+    visa:{ name:'Destination Thailand Visa', note:'Five-year multi-entry, 180 days per stay. Stay under the residency threshold and foreign income is usually untouched.', income:1400 },
+    alts:['chiang-mai','ho-chi-minh','kuala-lumpur'] },
+  { id:'chiang-mai', city:'Chiang Mai', country:'Thailand', region:'Asia', lat:18.7883, lng:98.9853,
+    rent:12, cpi:30, tax:0.17, health:18, net:150,
+    visa:{ name:'Destination Thailand Visa', note:'Same permit as Bangkok at roughly half the rent. Burning season from February to April is the catch.', income:1400 },
+    alts:['bangkok','ho-chi-minh','bali'] },
+  { id:'bali', city:'Bali (Canggu)', country:'Indonesia', region:'Asia', lat:-8.6478, lng:115.1385,
+    rent:20, cpi:34, tax:0.05, health:22, net:60,
+    visa:{ name:'E33G Remote Worker KITAS', note:'One year for foreign-earned income. Fixed-line speeds are the weakest here, so budget for a backup connection.', income:5000 },
+    alts:['chiang-mai','kuala-lumpur','ho-chi-minh'] },
+  { id:'kuala-lumpur', city:'Kuala Lumpur', country:'Malaysia', region:'Asia', lat:3.1390, lng:101.6869,
+    rent:17, cpi:34, tax:0.15, health:24, net:130,
+    visa:{ name:'DE Rantau Nomad Pass', note:'Twelve months, renewable, aimed at tech and creative freelancers. Strong value per dollar of rent.', income:2000 },
+    alts:['bangkok','ho-chi-minh','chiang-mai'] },
+  { id:'ho-chi-minh', city:'Ho Chi Minh City', country:'Vietnam', region:'Asia', lat:10.8231, lng:106.6297,
+    rent:16, cpi:32, tax:0.10, health:20, net:105,
+    visa:{ name:'DT / business visa runs', note:'No dedicated nomad permit yet. Most freelancers cycle three-month business visas.', income:0 },
+    alts:['chiang-mai','bangkok','bali'] },
+  { id:'dubai', city:'Dubai', country:'United Arab Emirates', region:'Middle East', lat:25.2048, lng:55.2708,
+    rent:58, cpi:66, tax:0.00, health:48, net:175,
+    visa:{ name:'Virtual Working Programme', note:'One year, zero personal income tax. Rent is usually demanded in one or two annual cheques.', income:3500 },
+    alts:['istanbul','bangkok','kuala-lumpur'] },
+  { id:'sydney', city:'Sydney', country:'Australia', region:'Oceania', lat:-33.8688, lng:151.2093,
+    rent:68, cpi:82, tax:0.32, health:64, net:120,
+    visa:{ name:'No nomad visa', note:'Working holiday routes have age limits. Time zones favour Asian clients over European ones.', income:0 },
+    alts:['kuala-lumpur','bangkok','bali'] },
+  { id:'auckland', city:'Auckland', country:'New Zealand', region:'Oceania', lat:-36.8485, lng:174.7633,
+    rent:52, cpi:76, tax:0.30, health:58, net:140,
+    visa:{ name:'Visitor visa with remote work allowed', note:'Remote work for offshore clients is permitted on a visitor visa for up to 90 days.', income:0 },
+    alts:['bali','kuala-lumpur','bangkok'] },
+  { id:'cape-town', city:'Cape Town', country:'South Africa', region:'Africa', lat:-33.9249, lng:18.4241,
+    rent:22, cpi:40, tax:0.26, health:30, net:60,
+    visa:{ name:'Remote Work Visa', note:'Three years for high earners. Budget for backup power and a mobile data plan.', income:5200 },
+    alts:['istanbul','tbilisi','medellin'] }
+];
+
+const CURRENCIES = {
+  USD:{ sym:'$',  rate:1,     name:'US Dollar' },
+  EUR:{ sym:'€',  rate:0.92,  name:'Euro' },
+  GBP:{ sym:'£',  rate:0.79,  name:'British Pound' },
+  SGD:{ sym:'S$', rate:1.35,  name:'Singapore Dollar' },
+  AUD:{ sym:'A$', rate:1.52,  name:'Australian Dollar' },
+  CAD:{ sym:'C$', rate:1.37,  name:'Canadian Dollar' },
+  CHF:{ sym:'Fr', rate:0.89,  name:'Swiss Franc' },
+  JPY:{ sym:'¥',  rate:151,   name:'Japanese Yen' },
+  AED:{ sym:'AED',rate:3.67,  name:'UAE Dirham' },
+  INR:{ sym:'₹',  rate:83.2,  name:'Indian Rupee' }
+};
+
+
+/* ═══════════════════════════════════════════════════════════════
+   PRICE MODEL
+
+   A single multiplier per category is wrong: rice is shipped in bulk
+   and a haircut is somebody's wage, so they cannot move together.
+   Every item is instead broken into five cost drivers, and each city
+   prices those drivers differently.
+
+     g  traded goods  import duty, freight and local sales tax
+     l  local labour  the wage inside a service
+     r  premises      rent on the shop, clinic, gym or restaurant
+     c  local retail  domestically produced goods and retail margin
+     e  energy        fuel, power and the cost of moving things
+
+   On top of that, items with their own local economics carry an adjustment:
+   alcohol duty, fuel subsidy, vehicle tax, rice, medical pricing.
+   New York is the baseline, so all five drivers equal 1.00 there.
+   ═══════════════════════════════════════════════════════════════ */
+
+const IMPORTF = {
+  'new-york':1.00,'san-francisco':1.00,'toronto':1.06,'mexico-city':1.08,'medellin':1.18,
+  'buenos-aires':1.45,'london':1.08,'berlin':1.10,'lisbon':1.10,'paris':1.10,'amsterdam':1.10,
+  'barcelona':1.10,'zurich':1.04,'warsaw':1.08,'prague':1.08,'tallinn':1.10,'athens':1.12,
+  'istanbul':1.22,'tbilisi':1.12,'tokyo':1.02,'singapore':0.98,'hong-kong':0.95,'seoul':1.04,
+  'bangkok':1.10,'chiang-mai':1.10,'bali':1.28,'kuala-lumpur':1.06,'ho-chi-minh':1.12,
+  'dubai':0.96,'sydney':1.16,'auckland':1.20,'cape-town':1.20
+};
+const impf = c => IMPORTF[c.id] || 1.05;
+
+function drivers(c) {
+  return {
+    g: impf(c),
+    l: 0.08 + 0.92 * (0.45 * c.cpi + 0.55 * c.rent) / 100,
+    r: 0.15 + 0.85 * (c.rent / 100),
+    c: 0.20 + 0.80 * (c.cpi / 100),
+    e: 0.35 + 0.65 * (c.health / 100)
+  };
+}
+
+/* Item level adjustments. Anything not listed sits at 1.00. */
+const ADJ = {
+  dairy:{ tokyo:1.35,seoul:1.40,singapore:1.45,'hong-kong':1.45,bangkok:1.50,'chiang-mai':1.45,bali:1.60,
+    'kuala-lumpur':1.40,'ho-chi-minh':1.50,dubai:1.15,'mexico-city':1.10,medellin:1.05,'cape-town':0.90,
+    istanbul:0.85,tbilisi:0.80,warsaw:0.85,prague:0.85,athens:0.95,lisbon:0.90,barcelona:0.90,berlin:0.80,
+    amsterdam:0.85,paris:0.95,zurich:1.15,london:0.95,'buenos-aires':0.85,auckland:0.80,sydney:0.85 },
+  rice:{ bangkok:0.45,'chiang-mai':0.45,'ho-chi-minh':0.40,bali:0.50,'kuala-lumpur':0.55,singapore:0.80,
+    'hong-kong':0.85,seoul:1.60,tokyo:1.30,istanbul:0.90,tbilisi:0.90,'mexico-city':0.80,medellin:0.80,
+    'buenos-aires':0.80,'cape-town':0.85,dubai:0.80,warsaw:0.90,prague:0.90 },
+  beef:{ 'buenos-aires':0.45,medellin:0.60,'mexico-city':0.70,'cape-town':0.65,sydney:0.85,auckland:0.85,
+    toronto:0.95,tbilisi:0.80,istanbul:0.90,warsaw:0.85,prague:0.90,tokyo:1.70,seoul:1.90,'hong-kong':1.40,
+    singapore:1.35,bangkok:1.20,'chiang-mai':1.20,bali:1.40,'kuala-lumpur':1.30,'ho-chi-minh':1.25,
+    dubai:1.20,zurich:1.50,london:1.10,paris:1.10 },
+  tropical:{ bali:0.30,bangkok:0.35,'chiang-mai':0.35,'ho-chi-minh':0.35,'kuala-lumpur':0.40,medellin:0.35,
+    'mexico-city':0.45,'cape-town':0.50,singapore:0.70,'hong-kong':0.75,istanbul:0.60,dubai:0.80,
+    tokyo:1.50,seoul:1.70,zurich:1.30,auckland:1.20,tallinn:1.15,warsaw:1.10 },
+  temperate:{ bali:1.60,bangkok:1.50,'chiang-mai':1.40,'ho-chi-minh':1.50,'kuala-lumpur':1.40,singapore:1.30,
+    'hong-kong':1.25,dubai:1.20,medellin:1.20,'cape-town':0.85,warsaw:0.70,prague:0.75,tbilisi:0.70,
+    istanbul:0.80,tokyo:1.60,seoul:1.80,tallinn:0.80 },
+  alcohol:{ singapore:2.50,dubai:2.30,'hong-kong':1.25,sydney:1.60,auckland:1.55,tokyo:0.85,seoul:0.90,
+    istanbul:2.00,bali:1.90,'kuala-lumpur':1.90,bangkok:1.35,'chiang-mai':1.30,'ho-chi-minh':1.00,
+    london:1.15,berlin:0.75,prague:0.50,warsaw:0.80,lisbon:0.70,barcelona:0.70,athens:0.85,tbilisi:0.60,
+    tallinn:0.90,medellin:0.80,'mexico-city':0.85,'buenos-aires':0.70,'cape-town':0.70,zurich:1.30,toronto:1.25 },
+  wine:{ lisbon:0.35,barcelona:0.35,athens:0.50,paris:0.45,'buenos-aires':0.35,'cape-town':0.35,prague:0.60,
+    warsaw:0.80,berlin:0.60,amsterdam:0.80,zurich:0.90,london:0.90,tallinn:0.85,istanbul:1.80,dubai:2.40,
+    singapore:2.20,bangkok:2.20,'chiang-mai':2.10,bali:2.60,'kuala-lumpur':2.20,'ho-chi-minh':1.80,
+    tokyo:1.30,seoul:1.60,'hong-kong':1.20,medellin:1.30,'mexico-city':1.20,tbilisi:0.50,sydney:0.80,
+    auckland:0.90,toronto:1.20 },
+  fuel:{ dubai:0.45,'kuala-lumpur':0.50,'mexico-city':0.80,medellin:0.75,'buenos-aires':0.70,bali:0.70,
+    'ho-chi-minh':0.85,bangkok:0.95,'chiang-mai':0.95,istanbul:1.15,tbilisi:1.05,'cape-town':1.00,
+    toronto:1.15,tokyo:1.15,seoul:1.30,singapore:1.75,'hong-kong':2.00,london:1.55,berlin:1.65,paris:1.70,
+    amsterdam:1.85,lisbon:1.75,barcelona:1.55,zurich:1.70,athens:1.70,warsaw:1.40,prague:1.50,tallinn:1.55,
+    sydney:1.30,auckland:1.50 },
+  vehicle:{ singapore:4.20,'hong-kong':1.90,istanbul:1.80,'buenos-aires':1.70,bali:1.50,medellin:1.35,
+    'mexico-city':1.10,'cape-town':1.15,auckland:1.05,sydney:1.10,dubai:0.85,tokyo:0.95,seoul:0.95,
+    'kuala-lumpur':1.10,'ho-chi-minh':1.60,bangkok:1.20,'chiang-mai':1.20,zurich:0.90 },
+  scooter:{ bangkok:0.45,'chiang-mai':0.45,'ho-chi-minh':0.40,bali:0.50,'kuala-lumpur':0.60,medellin:0.60,
+    'mexico-city':0.80,istanbul:0.90,singapore:1.20,'hong-kong':1.20,london:1.20,paris:1.20,zurich:1.40 },
+  transit:{ berlin:0.45,prague:0.50,warsaw:0.55,tallinn:0.35,athens:0.55,istanbul:0.35,tbilisi:0.30,
+    lisbon:0.55,barcelona:0.60,paris:0.95,london:1.30,amsterdam:1.00,zurich:1.35,tokyo:0.95,seoul:0.75,
+    singapore:0.90,'hong-kong':0.70,bangkok:0.80,'chiang-mai':0.70,'ho-chi-minh':0.50,'kuala-lumpur':0.60,
+    bali:0.60,dubai:0.70,'mexico-city':0.35,medellin:0.50,'buenos-aires':0.30,'cape-town':0.70,toronto:1.00,
+    sydney:1.10,auckland:1.00,'san-francisco':0.85 },
+  taxi:{ bangkok:0.50,'chiang-mai':0.50,'ho-chi-minh':0.45,bali:0.50,'kuala-lumpur':0.55,medellin:0.55,
+    'mexico-city':0.60,istanbul:0.50,tbilisi:0.50,'cape-town':0.70,dubai:0.85,singapore:0.90,'hong-kong':0.80,
+    tokyo:1.35,zurich:1.50,london:1.10,amsterdam:1.15,warsaw:0.75,prague:0.75 },
+  parking:{ 'hong-kong':1.80,singapore:1.30,london:1.50,zurich:1.20,sydney:1.10,tokyo:1.20,dubai:0.60,
+    bangkok:0.50,istanbul:0.50,tbilisi:0.40,medellin:0.60 },
+  utilities:{ zurich:0.80,berlin:1.35,amsterdam:1.30,london:1.25,paris:1.05,lisbon:1.10,barcelona:1.15,
+    athens:1.20,prague:1.20,warsaw:1.15,tallinn:1.20,tbilisi:0.50,istanbul:0.60,dubai:1.15,singapore:1.10,
+    bangkok:1.00,'chiang-mai':0.95,bali:1.00,'kuala-lumpur':0.70,'ho-chi-minh':0.80,tokyo:1.15,seoul:0.85,
+    'mexico-city':0.70,medellin:0.60,'buenos-aires':0.45,'cape-town':0.90,sydney:1.10,auckland:1.05,toronto:0.90 },
+  internet:{ lisbon:0.55,barcelona:0.50,paris:0.45,berlin:0.60,amsterdam:0.60,london:0.55,zurich:1.10,
+    warsaw:0.45,prague:0.55,tallinn:0.40,athens:0.60,istanbul:0.45,tbilisi:0.35,tokyo:0.70,seoul:0.50,
+    singapore:0.55,'hong-kong':0.50,bangkok:0.35,'chiang-mai':0.35,bali:0.50,'kuala-lumpur':0.40,
+    'ho-chi-minh':0.30,dubai:1.30,sydney:1.00,auckland:0.95,'cape-town':1.00,'mexico-city':0.60,
+    medellin:0.50,'buenos-aires':0.45,toronto:1.05 },
+  mobile:{ lisbon:0.35,barcelona:0.30,paris:0.25,berlin:0.50,amsterdam:0.45,london:0.30,zurich:0.90,
+    warsaw:0.20,prague:0.35,tallinn:0.30,athens:0.40,istanbul:0.25,tbilisi:0.20,tokyo:0.60,seoul:0.70,
+    singapore:0.35,'hong-kong':0.30,bangkok:0.25,'chiang-mai':0.25,bali:0.20,'kuala-lumpur':0.25,
+    'ho-chi-minh':0.15,dubai:0.90,sydney:0.50,auckland:0.60,'cape-town':0.50,'mexico-city':0.35,
+    medellin:0.30,'buenos-aires':0.30,toronto:1.10 },
+  medical:{ toronto:0.35,london:0.40,berlin:0.45,lisbon:0.30,paris:0.40,amsterdam:0.45,barcelona:0.30,
+    zurich:0.80,warsaw:0.25,prague:0.25,tallinn:0.25,athens:0.30,istanbul:0.20,tbilisi:0.18,tokyo:0.35,
+    singapore:0.55,'hong-kong':0.50,seoul:0.30,bangkok:0.30,'chiang-mai':0.28,bali:0.30,'kuala-lumpur':0.30,
+    'ho-chi-minh':0.25,dubai:0.50,sydney:0.50,auckland:0.45,'cape-town':0.35,'mexico-city':0.30,
+    medellin:0.22,'buenos-aires':0.20 },
+  brandTech:{ 'buenos-aires':1.50,istanbul:1.45,medellin:1.20,'mexico-city':1.15,'cape-town':1.20,bali:1.25,
+    'ho-chi-minh':1.10,bangkok:1.05,'kuala-lumpur':1.02,singapore:0.98,'hong-kong':0.95,dubai:0.95,
+    tokyo:0.95,seoul:1.00,london:1.05,berlin:1.08,paris:1.08,zurich:1.00,sydney:1.10,auckland:1.15,toronto:1.05 },
+  brandWear:{ bangkok:1.15,'chiang-mai':1.15,'ho-chi-minh':1.20,bali:1.25,'kuala-lumpur':1.10,singapore:1.05,
+    'hong-kong':0.95,tokyo:1.05,seoul:1.10,istanbul:1.20,'buenos-aires':1.40,medellin:1.30,'mexico-city':1.15,
+    'cape-town':1.15,london:1.00,berlin:0.95,lisbon:0.95,zurich:1.15,dubai:0.95 },
+  winter:{ bangkok:1.40,'chiang-mai':1.40,'ho-chi-minh':1.40,bali:1.50,'kuala-lumpur':1.40,singapore:1.40,
+    dubai:1.30,medellin:1.30,'cape-town':1.10,warsaw:0.80,prague:0.80,tallinn:0.75,berlin:0.85,tbilisi:0.85,
+    tokyo:0.90,seoul:0.85,toronto:0.90 },
+  streaming:{ lisbon:0.70,barcelona:0.70,athens:0.70,warsaw:0.55,prague:0.60,tallinn:0.60,istanbul:0.25,
+    tbilisi:0.40,berlin:0.80,paris:0.80,london:0.85,zurich:0.95,tokyo:0.70,seoul:0.65,singapore:0.55,
+    'hong-kong':0.55,bangkok:0.40,'chiang-mai':0.40,bali:0.35,'kuala-lumpur':0.40,'ho-chi-minh':0.30,
+    dubai:0.70,'mexico-city':0.50,medellin:0.40,'buenos-aires':0.35,'cape-town':0.50,sydney:0.85,
+    auckland:0.85,toronto:0.90 },
+  travel:{ lisbon:0.55,barcelona:0.55,athens:0.50,berlin:0.60,warsaw:0.50,prague:0.50,tallinn:0.50,
+    istanbul:0.45,tbilisi:0.40,paris:0.70,amsterdam:0.70,london:0.70,zurich:1.10,bangkok:0.40,
+    'chiang-mai':0.40,'ho-chi-minh':0.35,bali:0.45,'kuala-lumpur':0.40,singapore:0.80,'hong-kong':0.80,
+    tokyo:0.80,seoul:0.70,dubai:0.90,'mexico-city':0.50,medellin:0.45,'buenos-aires':0.45,'cape-town':0.50,
+    sydney:0.90,auckland:0.95,toronto:0.90 },
+  school:{ singapore:1.60,'hong-kong':1.50,dubai:1.10,tokyo:1.25,seoul:1.10,bangkok:0.95,'chiang-mai':0.70,
+    bali:0.70,'kuala-lumpur':0.70,'ho-chi-minh':0.80,istanbul:0.70,tbilisi:0.50,warsaw:0.70,prague:0.70,
+    tallinn:0.60,athens:0.60,lisbon:0.70,barcelona:0.75,berlin:0.70,amsterdam:0.85,paris:0.80,london:1.20,
+    zurich:1.40,sydney:0.90,auckland:0.80,'cape-town':0.60,'mexico-city':0.70,medellin:0.50,
+    'buenos-aires':0.50,toronto:0.85 },
+  daycare:{ dubai:1.10,singapore:1.20,'hong-kong':1.15,tokyo:0.80,seoul:0.60,bangkok:0.60,bali:0.50,
+    'kuala-lumpur':0.50,'ho-chi-minh':0.50,berlin:0.25,warsaw:0.40,prague:0.40,tallinn:0.35,lisbon:0.50,
+    barcelona:0.60,paris:0.35,amsterdam:0.60,london:1.00,zurich:1.10,athens:0.50,istanbul:0.50,tbilisi:0.40,
+    'mexico-city':0.50,medellin:0.40,'buenos-aires':0.40,'cape-town':0.50,sydney:0.80,auckland:0.80,toronto:0.80 }
+};
+
+const CATS = [
+  { id:'grocery',   label:'Groceries',             icon:'fa-basket-shopping' },
+  { id:'dining',    label:'Eating and drinking',   icon:'fa-utensils' },
+  { id:'home',      label:'Home and bills',        icon:'fa-house' },
+  { id:'tech',      label:'Tech and electronics',  icon:'fa-tv' },
+  { id:'cloth',     label:'Clothing and shoes',    icon:'fa-shirt' },
+  { id:'transport', label:'Getting around',        icon:'fa-train-subway' },
+  { id:'care',      label:'Health and care',       icon:'fa-heart-pulse' },
+  { id:'leisure',   label:'Leisure and going out', icon:'fa-ticket' },
+  { id:'services',  label:'Services and help',     icon:'fa-hand-holding-hand' }
+];
+
+/* p = New York price in USD. m = cost composition. a = adjustments, with an
+   optional exponent to soften one. b = monthly quantity in the essentials
+   basket. s = counted once in the cost to land. */
+const ITEMS = [
+  { n:'Milk, 1 litre',              c:'grocery', p:1.30,  m:{c:.45,l:.20,r:.10,e:.15,g:.10}, a:['dairy'] },
+  { n:'Fresh loaf of bread',        c:'grocery', p:3.80,  m:{l:.40,c:.30,r:.15,e:.10,g:.05} },
+  { n:'White rice, 1 kg',           c:'grocery', p:4.90,  m:{g:.35,c:.35,l:.15,r:.10,e:.05}, a:['rice'] },
+  { n:'Dozen eggs',                 c:'grocery', p:4.60,  m:{c:.48,l:.24,r:.10,e:.13,g:.05} },
+  { n:'Local cheese, 1 kg',         c:'grocery', p:13.50, m:{c:.45,g:.20,l:.15,r:.10,e:.10}, a:['dairy'] },
+  { n:'Chicken breast, 1 kg',       c:'grocery', p:12.80, m:{c:.52,l:.16,r:.09,e:.18,g:.05} },
+  { n:'Beef, 1 kg',                 c:'grocery', p:17.50, m:{c:.45,g:.15,l:.15,r:.10,e:.15}, a:['beef'] },
+  { n:'Apples, 1 kg',               c:'grocery', p:5.20,  m:{c:.50,l:.20,r:.10,e:.15,g:.05}, a:['temperate'] },
+  { n:'Bananas, 1 kg',              c:'grocery', p:1.90,  m:{g:.30,c:.30,l:.15,r:.10,e:.15}, a:['tropical'] },
+  { n:'Tomatoes, 1 kg',             c:'grocery', p:5.40,  m:{c:.52,l:.22,r:.09,e:.12,g:.05}, a:[['tropical',0.4]] },
+  { n:'Potatoes, 1 kg',             c:'grocery', p:3.10,  m:{c:.55,l:.20,r:.10,e:.10,g:.05} },
+  { n:'Bottled water, 1.5 litres',  c:'grocery', p:2.30,  m:{c:.40,e:.25,l:.20,r:.15} },
+  { n:'Coffee beans, 250 g',        c:'grocery', p:12.00, m:{g:.45,c:.25,l:.15,r:.15} },
+  { n:'Weekly grocery run for one', c:'grocery', p:95.00, m:{c:.45,l:.20,r:.12,e:.13,g:.10}, b:4.33 },
+
+  { n:'Coffee at a cafe',           c:'dining',  p:5.20,  m:{l:.40,r:.28,c:.17,g:.05,e:.10}, b:12 },
+  { n:'Lunch at a casual spot',     c:'dining',  p:20.00, m:{l:.38,r:.25,c:.27,e:.10}, b:8 },
+  { n:'Dinner for two, mid range',  c:'dining',  p:95.00, m:{l:.40,r:.28,c:.25,e:.07} },
+  { n:'Fast food combo meal',       c:'dining',  p:11.00, m:{l:.30,r:.20,c:.35,g:.10,e:.05} },
+  { n:'Domestic beer at a bar',     c:'dining',  p:8.00,  m:{l:.30,r:.25,c:.25,e:.05,g:.15}, a:['alcohol'] },
+  { n:'Cocktail at a decent bar',   c:'dining',  p:17.00, m:{l:.35,r:.30,c:.20,g:.15}, a:[['alcohol',0.8]] },
+  { n:'Brunch for two',             c:'dining',  p:55.00, m:{l:.43,r:.24,c:.26,e:.07} },
+  { n:'Bottle of wine from a shop', c:'dining',  p:15.00, m:{g:.30,c:.40,l:.15,r:.15}, a:['wine'] },
+  { n:'Food delivery, average order',c:'dining', p:28.00, m:{l:.45,c:.30,r:.15,e:.10} },
+
+  { n:'One bed flat, city centre',  c:'home',    p:3400, m:{r:1} },
+  { n:'One bed flat, outside centre',c:'home',   p:2600, m:{r:.95,l:.05} },
+  { n:'Utilities for a one bed flat',c:'home',   p:165,  m:{e:.60,c:.20,l:.10,r:.10}, a:['utilities'], b:1 },
+  { n:'Home internet, 100 Mbps plus',c:'home',   p:70,   m:{l:.30,c:.30,g:.20,e:.20}, a:['internet'], b:1 },
+  { n:'Mobile plan with data',      c:'home',    p:55,   m:{l:.25,c:.35,g:.20,e:.20}, a:['mobile'], b:1 },
+  { n:'Furnishing a one bed flat',  c:'home',    p:3200, m:{g:.45,c:.30,l:.15,r:.10}, s:1 },
+  { n:'Washing machine',            c:'home',    p:620,  m:{g:.80,c:.15,l:.05}, s:1 },
+  { n:'Coworking desk, monthly',    c:'home',    p:350,  m:{r:.50,l:.30,c:.10,e:.10} },
+
+  { n:'55 inch 4K television',      c:'tech',    p:520,  m:{g:.85,l:.05,r:.05,c:.05}, s:1 },
+  { n:'Flagship phone, base model', c:'tech',    p:830,  m:{g:.92,l:.03,r:.05}, a:['brandTech'] },
+  { n:'Mid range Android phone',    c:'tech',    p:380,  m:{g:.88,l:.05,c:.07}, a:[['brandTech',0.6]], s:1 },
+  { n:'Thin and light laptop',      c:'tech',    p:1099, m:{g:.92,l:.03,r:.05}, a:['brandTech'] },
+  { n:'Mid range Windows laptop',   c:'tech',    p:750,  m:{g:.88,c:.07,l:.05}, a:[['brandTech',0.5]], s:1 },
+  { n:'Noise cancelling headphones',c:'tech',    p:330,  m:{g:.88,r:.05,l:.07}, a:[['brandTech',0.7]] },
+  { n:'27 inch monitor',            c:'tech',    p:280,  m:{g:.90,c:.05,l:.05}, s:1 },
+  { n:'Mid range tablet',           c:'tech',    p:450,  m:{g:.90,l:.05,r:.05}, a:[['brandTech',0.6]] },
+  { n:'Smartwatch',                 c:'tech',    p:300,  m:{g:.90,l:.05,r:.05}, a:[['brandTech',0.7]] },
+  { n:'Games console',              c:'tech',    p:500,  m:{g:.90,l:.05,c:.05}, a:['brandTech'] },
+  { n:'Decent Wi-Fi router',        c:'tech',    p:120,  m:{g:.85,c:.10,l:.05}, s:1 },
+  { n:'Portable power bank',        c:'tech',    p:40,   m:{g:.80,c:.15,l:.05} },
+
+  { n:'Running shoes, known brand', c:'cloth',   p:120,  m:{g:.75,r:.10,l:.10,c:.05}, a:['brandWear'] },
+  { n:'Jeans, known brand',         c:'cloth',   p:62,   m:{g:.70,r:.12,l:.10,c:.08}, a:['brandWear'] },
+  { n:'Summer dress, chain store',  c:'cloth',   p:45,   m:{g:.60,r:.15,l:.15,c:.10}, a:[['brandWear',0.6]] },
+  { n:'Leather business shoes',     c:'cloth',   p:130,  m:{g:.55,l:.20,c:.15,r:.10} },
+  { n:'Winter jacket',              c:'cloth',   p:180,  m:{g:.70,r:.12,l:.10,c:.08}, a:['winter'] },
+  { n:'Plain t-shirts, pack of three',c:'cloth', p:28,   m:{g:.60,c:.25,l:.10,r:.05} },
+
+  { n:'Monthly transit pass',       c:'transport',p:132, m:{l:.35,e:.30,c:.20,r:.15}, a:['transit'], b:1 },
+  { n:'One way transit ticket',     c:'transport',p:2.90,m:{l:.32,e:.34,c:.22,r:.12}, a:[['transit',0.85]] },
+  { n:'Taxi across town, 5 km',     c:'transport',p:18,  m:{l:.55,e:.30,c:.15}, a:['taxi'] },
+  { n:'Rideshare to the airport',   c:'transport',p:60,  m:{l:.50,e:.35,c:.15}, a:['taxi'] },
+  { n:'Litre of petrol',            c:'transport',p:1.05,m:{g:.65,e:.20,c:.15}, a:['fuel'] },
+  { n:'Small new car, mid range',   c:'transport',p:26000,m:{g:.70,c:.10,l:.05,e:.15}, a:['vehicle'] },
+  { n:'Used scooter or motorbike',  c:'transport',p:2200,m:{g:.60,c:.20,l:.10,e:.10}, a:['scooter'] },
+  { n:'Commuter bicycle',           c:'transport',p:480, m:{g:.75,r:.08,l:.10,c:.07} },
+  { n:'Monthly parking spot',       c:'transport',p:400, m:{r:.80,l:.15,e:.05}, a:['parking'] },
+
+  { n:'Private doctor visit',       c:'care',    p:160,  m:{l:.70,r:.15,g:.10,c:.05}, a:['medical'] },
+  { n:'Dental cleaning',            c:'care',    p:140,  m:{l:.65,r:.15,g:.15,c:.05}, a:['medical'] },
+  { n:'Health insurance, monthly',  c:'care',    p:480,  m:{l:.50,g:.20,c:.30}, a:['medical'] },
+  { n:'Course of antibiotics',      c:'care',    p:25,   m:{g:.50,c:.30,l:.10,r:.10}, a:[['medical',0.6]] },
+  { n:'Eye test and basic glasses', c:'care',    p:220,  m:{g:.55,l:.25,r:.15,c:.05}, a:[['medical',0.5]] },
+  { n:'Physio session',             c:'care',    p:110,  m:{l:.80,r:.15,c:.05}, a:[['medical',0.7]] },
+
+  { n:'Gym membership, monthly',    c:'leisure', p:75,   m:{r:.40,l:.35,e:.10,c:.15}, b:1 },
+  { n:'Cinema ticket',              c:'leisure', p:18,   m:{r:.30,l:.30,g:.20,c:.20} },
+  { n:'Streaming bundle, monthly',  c:'leisure', p:35,   m:{g:.75,c:.25}, a:['streaming'] },
+  { n:'Yoga or fitness class',      c:'leisure', p:28,   m:{l:.55,r:.35,c:.10} },
+  { n:'Weekend away, two nights',   c:'leisure', p:320,  m:{r:.40,l:.30,e:.20,c:.10}, a:['travel'] },
+  { n:'Concert or match ticket',    c:'leisure', p:90,   m:{l:.30,r:.25,g:.30,c:.15} },
+  { n:'Museum entry',               c:'leisure', p:25,   m:{l:.50,r:.25,c:.25} },
+
+  { n:'Haircut, standard',          c:'services',p:45,   m:{l:.75,r:.20,c:.05} },
+  { n:'Cleaner, twice a month',     c:'services',p:200,  m:{l:.90,e:.05,c:.05} },
+  { n:'Laundry, wash and fold, 5 kg',c:'services',p:25,  m:{l:.60,e:.20,r:.15,c:.05} },
+  { n:'Simple clothing alteration', c:'services',p:22,   m:{l:.85,r:.10,c:.05} },
+  { n:'Accountant, annual filing',  c:'services',p:450,  m:{l:.90,r:.10} },
+  { n:'Hour long massage',          c:'services',p:110,  m:{l:.72,r:.23,c:.05} },
+  { n:'Nursery or daycare, monthly',c:'services',p:2100, m:{l:.75,r:.20,c:.05}, a:['daycare'] },
+  { n:'International school, monthly',c:'services',p:2400,m:{g:.35,l:.40,r:.20,c:.05}, a:['school'] }
+];
+
+/* New York reference basket, monthly USD */
+const BASKET = { rent:3400, everyday:1500, health:520 };
+
+/* ── storage that degrades gracefully ─────────────────────────── */
+const Store = (() => {
+  let ok = true, mem = {};
+  try { localStorage.setItem('__ge','1'); localStorage.removeItem('__ge'); }
+  catch (e) { ok = false; }
+  return {
+    ok,
+    get(k, fallback) {
+      try { const v = ok ? localStorage.getItem(k) : mem[k];
+            return v == null ? fallback : JSON.parse(v); }
+      catch (e) { return fallback; }
+    },
+    set(k, v) {
+      const s = JSON.stringify(v);
+      try { ok ? localStorage.setItem(k, s) : (mem[k] = s); } catch (e) { mem[k] = s; }
+    },
+    del(k) { try { ok ? localStorage.removeItem(k) : delete mem[k]; } catch (e) {} }
+  };
+})();
+
+const AKEY = { users:'geoearn.users', session:'geoearn.session', theme:'geoearn.theme', moved:'geoearn.migrated' };
+
+/* Every signed-in account gets its own slice of storage. Guests share one slot. */
+let session = null;                       /* { id, name, email, created } or { guest:true } */
+function ns() { return session && !session.guest ? 'u.' + session.id : 'guest'; }
+function uk(part) { return 'geoearn.' + ns() + '.' + part; }
+const KEY = {
+  get prefs() { return uk('prefs'); },
+  get scen()  { return uk('scenarios'); },
+  get calc()  { return uk('calc'); },
+  get tab()   { return uk('tab'); }
+};
+
+/* ── state ────────────────────────────────────────────────────── */
+const defaults = {
+  prefs: { name:'Alex Kim', role:'Product designer', currency:'USD', taxHome:'United States',
+           dark:false, roundUp:true, target:24000 },
+  calc:  { origin:'new-york', dest:'lisbon', income:120000, hourly:85, lifestyle:100 }
+};
+
+let prefs = Object.assign({}, defaults.prefs);
+let calc  = Object.assign({}, defaults.calc);
+let scenarios = [];
+let appReady = false, carryGuestData = false;
+
+function loadUserData() {
+  const stored = Store.get(KEY.prefs, null);
+  prefs = Object.assign({}, defaults.prefs, stored || {});
+  calc  = Object.assign({}, defaults.calc,  Store.get(KEY.calc, {}));
+  scenarios = Store.get(KEY.scen, []);
+  if (!stored && session && !session.guest) prefs.name = session.name;
+  if (!stored && session && session.guest) prefs.name = 'Guest';
+}
+let chart, map, layerLight, layerDark, routeLine, markerA, markerB;
+let result = null;
+
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const byId = id => CITIES.find(c => c.id === id) || CITIES[0];
+
+/* ── formatting ───────────────────────────────────────────────── */
+function cur() { return CURRENCIES[prefs.currency] || CURRENCIES.USD; }
+function conv(usd) { return usd * cur().rate; }
+function money(usd, dp = 0) {
+  const c = cur();
+  const v = conv(usd);
+  const s = v.toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp });
+  return c.sym + s;
+}
+function pct(v, dp = 0) { return (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(dp) + '%'; }
+
+function toast(msg, icon = 'fa-circle-check') {
+  const t = $('#toast');
+  t.innerHTML = '<i class="fa-solid ' + icon + ' mr-2"></i>' + msg;
+  t.style.opacity = '1';
+  t.style.transform = 'translate(-50%, 0)';
+  clearTimeout(t._h);
+  t._h = setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translate(-50%, 16px)'; }, 2200);
+}
+
+function distanceKm(a, b) {
+  const R = 6371, r = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * r, dLng = (b.lng - a.lng) * r;
+  const x = Math.sin(dLat / 2) ** 2 +
+            Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLng / 2) ** 2;
+  return Math.round(2 * R * Math.asin(Math.sqrt(x)));
+}
+function tzDrift(a, b) { return Math.round(Math.abs(a.lng - b.lng) / 15); }
+
+/* ── the model ────────────────────────────────────────────────── */
+function monthlyCost(c, lifestyle) {
+  const L = lifestyle / 100;
+  const rent     = BASKET.rent     * (c.rent   / 100) * (0.55 + 0.45 * L);
+  const everyday = BASKET.everyday * (c.cpi    / 100) * L;
+  const health   = BASKET.health   * (c.health / 100) * (0.70 + 0.30 * L);
+  return { rent, everyday, health, total: rent + everyday + health };
+}
+
+function compute() {
+  const A = byId(calc.origin), B = byId(calc.dest);
+  const L = calc.lifestyle;
+  const income = Math.max(0, Number(calc.income) || 0);
+  const hourly = Math.max(1, Number(calc.hourly) || 1);
+  const hours  = Math.min(5000, Math.max(100, income / hourly));
+
+  const costA = monthlyCost(A, L), costB = monthlyCost(B, L);
+  const netA = income * (1 - A.tax);
+  const savings = netA - costA.total * 12;
+
+  const reqGross = (costB.total * 12 + savings) / Math.max(0.05, 1 - B.tax);
+  const reqHourly = reqGross / hours;
+  const arb = income > 0 ? ((income - reqGross) / income) * 100 : 0;
+
+  return {
+    A, B, L, income, hourly, hours, costA, costB, savings, reqGross, reqHourly, arb,
+    taxA: income * A.tax / 12,
+    taxB: reqGross * B.tax / 12,
+    colDelta: ((costB.total - costA.total) / costA.total) * 100,
+    netB: reqGross * (1 - B.tax),
+    dist: distanceKm(A, B),
+    tz: tzDrift(A, B)
+  };
+}
+
+/* ── rendering: matrix tab ────────────────────────────────────── */
+function renderMatrix() {
+  const r = result = compute();
+  const round = prefs.roundUp;
+  const shownHourly = round ? Math.ceil(conv(r.reqHourly)) : conv(r.reqHourly);
+
+  $('#heroRoute').textContent = r.A.city + ' → ' + r.B.city;
+  $('#heroCur').textContent = cur().sym;
+  $('#heroRate').textContent = shownHourly.toLocaleString(undefined, { maximumFractionDigits: round ? 0 : 1 });
+  $('#heroOld').textContent = money(r.hourly, 0);
+  $('#hoursNote').textContent = '≈ ' + Math.round(r.hours).toLocaleString() + ' billable hours a year';
+
+  const gain = r.arb >= 0;
+  const badge = $('#arbBadge');
+  badge.className = 'shrink-0 rounded-xl px-4 py-3 min-w-[168px] border ' +
+    (gain ? 'bg-money-600/15 border-money-500/40' : 'bg-amber-500/15 border-amber-500/40');
+  $('#arbIcon').className = 'fa-solid ' + (gain ? 'fa-arrow-trend-down' : 'fa-arrow-trend-up');
+  $('#arbIcon').parentElement.className = 'flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider ' +
+    (gain ? 'text-money-500' : 'text-amber-400');
+  $('#arbLabel').textContent = gain ? 'Arbitrage gain' : 'Rate gap';
+  $('#arbValue').textContent = Math.abs(r.arb).toFixed(0) + '%';
+  $('#arbSub').textContent = gain ? 'room below your current rate' : 'more you need to charge';
+
+  $('#statCost').textContent = money(r.costB.total);
+  $('#statSave').textContent = money(r.savings);
+  $('#statSave').className = 'font-mono text-xl font-semibold mt-1 tnum ' +
+    (r.savings >= prefs.target ? 'text-money-500' : r.savings >= 0 ? 'text-white' : 'text-amber-400');
+  $('#statTax').textContent = (r.B.tax * 100).toFixed(0) + '%';
+  $('#statCol').textContent = pct(r.colDelta);
+
+  $('#mapSub').textContent = r.dist.toLocaleString() + ' km apart · about ' + r.tz + ' hour' +
+    (r.tz === 1 ? '' : 's') + ' of time zone drift';
+
+  $('#thOrigin').textContent = r.A.city;
+  $('#thDest').textContent = r.B.city;
+
+  const rows = [
+    ['Rent',                money(r.costA.rent),     money(r.costB.rent),     (r.costB.rent - r.costA.rent) / r.costA.rent * 100],
+    ['Everyday costs',      money(r.costA.everyday), money(r.costB.everyday), (r.costB.everyday - r.costA.everyday) / r.costA.everyday * 100],
+    ['Health &amp; transit',money(r.costA.health),   money(r.costB.health),   (r.costB.health - r.costA.health) / r.costA.health * 100],
+    ['Total monthly',       money(r.costA.total),    money(r.costB.total),    r.colDelta],
+    ['Effective tax',       (r.A.tax*100).toFixed(0)+'%', (r.B.tax*100).toFixed(0)+'%', (r.B.tax - r.A.tax) * 100],
+    ['Gross income needed', money(r.income),         money(r.reqGross),       (r.reqGross - r.income) / r.income * 100],
+    ['Hourly rate',         money(r.hourly),         money(r.reqHourly),      (r.reqHourly - r.hourly) / r.hourly * 100],
+    ['Median internet',     r.A.net + ' Mbps',       r.B.net + ' Mbps',       (r.B.net - r.A.net) / r.A.net * 100]
+  ];
+
+  $('#cmpBody').innerHTML = rows.map(([label, a, b, d], i) => {
+    const good = label === 'Median internet' ? d >= 0 : d <= 0;
+    const tone = Math.abs(d) < 0.5 ? 'text-slate-400'
+               : good ? 'text-money-600 dark:text-money-500' : 'text-amber-600 dark:text-amber-400';
+    const isTax = label === 'Effective tax';
+    return '<tr class="border-b border-slate-50 dark:border-navy-800/60 last:border-0">' +
+      '<td class="px-5 py-3 font-sans font-semibold text-[13px]">' + label + '</td>' +
+      '<td class="px-5 py-3 text-right text-slate-600 dark:text-slate-300">' + a + '</td>' +
+      '<td class="px-5 py-3 text-right font-semibold">' + b + '</td>' +
+      '<td class="px-5 py-3 text-right text-[13px] ' + tone + '">' +
+        (isTax ? (d > 0 ? '+' : d < 0 ? '−' : '') + Math.abs(d).toFixed(0) + ' pts' : pct(d)) +
+      '</td></tr>';
+  }).join('');
+
+  renderChart(r);
+  renderMap(r);
+  renderInsights(r);
+  renderLiving();
+  Store.set(KEY.calc, calc);
+}
+
+/* ── chart ────────────────────────────────────────────────────── */
+function chartColors() {
+  const dark = document.documentElement.classList.contains('dark');
+  return {
+    grid: dark ? 'rgba(148,163,184,.14)' : 'rgba(15,23,42,.08)',
+    tick: dark ? '#94A3B8' : '#64748B',
+    a: dark ? '#64748B' : '#0F172A',
+    b: '#2563EB'
+  };
+}
+
+function renderChart(r) {
+  const c = chartColors();
+  const data = {
+    labels: ['Rent', 'Everyday', 'Tax', 'Health & transit'],
+    datasets: [
+      { label: r.A.city, data: [r.costA.rent, r.costA.everyday, r.taxA, r.costA.health].map(conv),
+        backgroundColor: c.a, borderRadius: 6, borderSkipped: false, maxBarThickness: 26 },
+      { label: r.B.city, data: [r.costB.rent, r.costB.everyday, r.taxB, r.costB.health].map(conv),
+        backgroundColor: c.b, borderRadius: 6, borderSkipped: false, maxBarThickness: 26 }
+    ]
+  };
+  const opts = {
+    responsive: true, maintainAspectRatio: false,
+    animation: { duration: 500, easing: 'easeOutCubic' },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#0F172A', padding: 12, cornerRadius: 8,
+        titleFont: { family: 'Plus Jakarta Sans', weight: '700' },
+        bodyFont: { family: 'IBM Plex Mono' },
+        callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + cur().sym +
+          Math.round(ctx.parsed.y).toLocaleString() + '/mo' }
+      }
+    },
+    scales: {
+      x: { grid: { display: false }, border: { display: false },
+           ticks: { color: c.tick, font: { family: 'Plus Jakarta Sans', size: 11, weight: '600' } } },
+      y: { grid: { color: c.grid }, border: { display: false }, beginAtZero: true,
+           ticks: { color: c.tick, font: { family: 'IBM Plex Mono', size: 10 },
+                    callback: v => cur().sym + (v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v) } }
+    }
+  };
+
+  if (chart) { chart.data = data; chart.options = opts; chart.update(); }
+  else { chart = new Chart($('#expenseChart'), { type: 'bar', data, options: opts }); }
+
+  $('#chartLegend').innerHTML = [
+    { c: c.a, l: r.A.city, v: money(r.costA.total + r.taxA) },
+    { c: c.b, l: r.B.city, v: money(r.costB.total + r.taxB) }
+  ].map(x =>
+    '<div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:' + x.c + '"></span>' +
+    '<span class="font-semibold truncate">' + x.l + '</span>' +
+    '<span class="ml-auto font-mono text-slate-500 tnum">' + x.v + '</span></div>'
+  ).join('');
+}
+
+/* ── map ──────────────────────────────────────────────────────── */
+function pinIcon(cls, letter) {
+  return L.divIcon({ className: '', html: '<div class="pin ' + cls + '">' + letter + '</div>',
+                     iconSize: [30, 30], iconAnchor: [15, 15] });
+}
+
+function initMap() {
+  if (map) return;
+  map = L.map('map', { zoomControl: true, scrollWheelZoom: false, worldCopyJump: true });
+  layerLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    { attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 19 });
+  layerDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    { attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 19 });
+  (document.documentElement.classList.contains('dark') ? layerDark : layerLight).addTo(map);
+  map.setView([25, 5], 2);
+}
+
+function renderMap(r) {
+  if (!map) return;
+  const a = [r.A.lat, r.A.lng], b = [r.B.lat, r.B.lng];
+  if (markerA) map.removeLayer(markerA);
+  if (markerB) map.removeLayer(markerB);
+  if (routeLine) map.removeLayer(routeLine);
+
+  markerA = L.marker(a, { icon: pinIcon('pin-a', 'A') }).addTo(map)
+    .bindPopup('<b>' + r.A.city + '</b><br>' + money(r.costA.total) + '/mo · ' + (r.A.tax * 100).toFixed(0) + '% tax');
+  markerB = L.marker(b, { icon: pinIcon('pin-b', 'B') }).addTo(map)
+    .bindPopup('<b>' + r.B.city + '</b><br>' + money(r.costB.total) + '/mo · ' + (r.B.tax * 100).toFixed(0) + '% tax');
+
+  const mid = [(r.A.lat + r.B.lat) / 2 + Math.abs(r.A.lng - r.B.lng) * 0.09, (r.A.lng + r.B.lng) / 2];
+  const pts = [];
+  for (let t = 0; t <= 1.0001; t += 0.02) {
+    const u = 1 - t;
+    pts.push([
+      u * u * a[0] + 2 * u * t * mid[0] + t * t * b[0],
+      u * u * a[1] + 2 * u * t * mid[1] + t * t * b[1]
+    ]);
+  }
+  routeLine = L.polyline(pts, {
+    color: '#2563EB', weight: 2.5, opacity: .9, dashArray: '7 9', className: 'route'
+  }).addTo(map);
+
+  fitMap();
+}
+
+function fitMap() {
+  if (!map || !routeLine) return;
+  map.invalidateSize();
+  map.fitBounds(routeLine.getBounds(), { padding: [50, 50], maxZoom: 6 });
+}
+
+/* ── advisor insight cards ────────────────────────────────────── */
+function tierOf(tax) {
+  if (tax <= 0.10) return { label:'Low',  text:'text-money-600', ring:'bg-money-600/10 border-money-600/30' };
+  if (tax <= 0.25) return { label:'Mid',  text:'text-brand-600', ring:'bg-brand-600/10 border-brand-600/30' };
+  return { label:'High', text:'text-amber-600', ring:'bg-amber-500/10 border-amber-500/30' };
+}
+
+function renderInsights(r) {
+  const B = r.B, t = tierOf(B.tax);
+  $('#insCity').textContent = B.city;
+  $('#insCountry').textContent = B.country + ' · ' + B.region;
+  $('#insTierBadge').className = 'rounded-lg px-3 py-2 text-center border ' + t.ring;
+  $('#insTier').textContent = t.label;
+  $('#insTier').className = 'font-mono font-semibold text-lg ' + t.text;
+  $('#insTierBadge').firstElementChild.className = 'text-[9px] uppercase tracking-wider font-bold ' + t.text;
+
+  $('#insRent').textContent = B.rent;
+  $('#insCpi').textContent = B.cpi;
+  $('#insHealth').textContent = B.health;
+
+  $('#insVisaName').textContent = B.visa.name;
+  $('#insVisaNote').textContent = B.visa.note;
+  $('#insVisaIncome').textContent = B.visa.income ? money(B.visa.income) + '/mo' : 'No stated floor';
+
+  $('#insSpeed').textContent = B.net;
+  $('#insSpeedBar').style.width = Math.min(100, (B.net / 250) * 100) + '%';
+  $('#insSpeedNote').textContent = B.net >= 150
+    ? 'Plenty for calls, screen sharing, and large file handoffs.'
+    : B.net >= 90
+      ? 'Fine for daily client work; large uploads take patience.'
+      : 'Thin for video-heavy work, so plan a mobile data backup.';
+
+  $('#insAlts').innerHTML = B.alts.map(id => {
+    const c = byId(id), cm = monthlyCost(c, r.L).total;
+    const diff = ((cm - r.costB.total) / r.costB.total) * 100;
+    return '<button class="alt-pick w-full flex items-center gap-3 p-2.5 rounded-xl border border-slate-200 dark:border-navy-700 hover:border-brand-600 hover:bg-brand-600/5 transition text-left" data-id="' + c.id + '">' +
+      '<div class="w-8 h-8 rounded-lg bg-slate-100 dark:bg-navy-800 grid place-items-center shrink-0"><i class="fa-solid fa-location-dot text-xs text-brand-600"></i></div>' +
+      '<div class="min-w-0"><div class="text-[13px] font-semibold truncate">' + c.city + '</div>' +
+      '<div class="text-[11px] text-slate-500 truncate">' + c.country + '</div></div>' +
+      '<div class="ml-auto text-right shrink-0"><div class="font-mono text-[13px] font-semibold tnum">' + money(cm) + '</div>' +
+      '<div class="text-[10px] font-semibold ' + (diff <= 0 ? 'text-money-600' : 'text-amber-600') + '">' + pct(diff) + '</div></div>' +
+      '</button>';
+  }).join('');
+
+  $$('.alt-pick').forEach(b => b.addEventListener('click', () => {
+    calc.dest = b.dataset.id;
+    $('#dest').value = calc.dest;
+    renderMatrix();
+    renderChips();
+    toast('Loaded ' + byId(calc.dest).city, 'fa-location-dot');
+  }));
+}
+
+/* ── advisor: a local rules engine over the dataset ───────────── */
+function bubble(text, who) {
+  const wrap = document.createElement('div');
+  if (who === 'user') {
+    wrap.className = 'flex justify-end';
+    wrap.innerHTML = '<div class="max-w-[85%] px-4 py-2.5 rounded-2xl rounded-br-md bg-brand-600 text-white text-[13.5px] leading-relaxed">' +
+      text.replace(/</g, '&lt;') + '</div>';
+  } else {
+    wrap.className = 'flex gap-2.5';
+    wrap.innerHTML =
+      '<div class="w-7 h-7 rounded-lg bg-navy-900 dark:bg-brand-600 grid place-items-center shrink-0 mt-0.5"><i class="fa-solid fa-compass-drafting text-white text-[10px]"></i></div>' +
+      '<div class="max-w-[85%] px-4 py-3 rounded-2xl rounded-tl-md bg-slate-100 dark:bg-navy-800 text-[13.5px] leading-relaxed">' + text + '</div>';
+  }
+  $('#chatLog').appendChild(wrap);
+  $('#chatLog').scrollTop = $('#chatLog').scrollHeight;
+  return wrap;
+}
+
+function thinking() {
+  const w = document.createElement('div');
+  w.className = 'flex gap-2.5';
+  w.innerHTML =
+    '<div class="w-7 h-7 rounded-lg bg-navy-900 dark:bg-brand-600 grid place-items-center shrink-0 mt-0.5"><i class="fa-solid fa-compass-drafting text-white text-[10px]"></i></div>' +
+    '<div class="px-4 py-3.5 rounded-2xl rounded-tl-md bg-slate-100 dark:bg-navy-800 typing text-slate-500 flex items-center gap-1"><span></span><span></span><span></span></div>';
+  $('#chatLog').appendChild(w);
+  $('#chatLog').scrollTop = $('#chatLog').scrollHeight;
+  return w;
+}
+
+const b = s => '<strong class="font-bold">' + s + '</strong>';
+const mono = s => '<span class="font-mono font-semibold tnum">' + s + '</span>';
+
+function findCityIn(text) {
+  const t = text.toLowerCase();
+  return CITIES.find(c => t.includes(c.city.toLowerCase().split(' (')[0])) || null;
+}
+
+function answer(q) {
+  const r = result || compute();
+  const t = q.toLowerCase();
+  const mentioned = findCityIn(q);
+  const C = mentioned || r.B;
+
+  if (/tax|vat|deduct|write.?off|residen/.test(t)) {
+    const tier = tierOf(C.tax).label.toLowerCase();
+    return b(C.city) + ' sits in the ' + b(tier + ' tax tier') + ' at roughly ' + mono((C.tax * 100).toFixed(0) + '%') +
+      ' effective on freelance income. On the ' + mono(money(r.reqGross)) + ' gross you would need there, that is about ' +
+      mono(money(r.reqGross * C.tax)) + ' a year, leaving ' + mono(money(r.reqGross * (1 - C.tax))) + ' net.<br><br>' +
+      'Two things move this more than the headline rate: whether you stay under the 183-day residency threshold, and whether your income counts as foreign-sourced. ' +
+      C.visa.note + '<br><br><span class="text-slate-500">Rates here are illustrative averages. A local accountant will price your actual position.</span>';
+  }
+
+  if (/visa|permit|immigrat|stay|residency requirement|apply/.test(t)) {
+    return 'For ' + b(C.city) + ' the usual route is the ' + b(C.visa.name) + '.<br><br>' + C.visa.note +
+      (C.visa.income
+        ? '<br><br>The income floor is around ' + mono(money(C.visa.income) + '/mo') + '. Your target gross of ' +
+          mono(money(r.reqGross)) + ' works out to ' + mono(money(r.reqGross / 12) + '/mo') + ', which ' +
+          (r.reqGross / 12 >= C.visa.income
+            ? '<span class="text-money-600 font-semibold">clears it comfortably</span>.'
+            : '<span class="text-amber-600 font-semibold">falls short, so you would need to raise your rate or show savings</span>.')
+        : '<br><br>No published income floor for this route.');
+  }
+
+  if (/shop|grocer|basket|weekly|essentials|food/.test(t)) {
+    const items = ITEMS.filter(i => i.b);
+    const rows = items.map(i => '• ' + i.n + ': ' + mono(money(priceIn(C, i), priceIn(C, i) < 20 ? 2 : 0)) +
+      (i.b > 1 ? ' <span class="text-slate-500">x' + i.b + ' a month</span>' : '')).join('<br>');
+    let mA = 0, mB = 0;
+    items.forEach(i => { mA += priceIn(r.A, i) * i.b; mB += priceIn(C, i) * i.b; });
+    return 'The monthly essentials basket in ' + b(C.city) + ' comes to ' + b(money(mB)) + ', against ' +
+      mono(money(mA)) + ' in ' + r.A.city + ' (' + b(pct((mB - mA) / mA * 100)) + ').<br><br>' + rows +
+      '<br><br>The Living Costs tab breaks out all ' + ITEMS.length + ' tracked prices.';
+  }
+
+  if (/gadget|electronic|tv|television|laptop|phone|tech|import|appliance/.test(t)) {
+    const tv = ITEMS.find(i => i.n.indexOf('television') > -1);
+    const lap = ITEMS.find(i => i.n.indexOf('Thin and light') > -1);
+    const ph = ITEMS.find(i => i.n.indexOf('Flagship') > -1);
+    const g = catDelta('tech', r.A, C);
+    return 'Electronics barely follow the cost of living. In ' + b(C.city) + ' they land about ' +
+      b(pct(g, 0)) + ' against ' + r.A.city + ', mostly down to import duty and local sales tax.<br><br>' +
+      '• 55 inch television: ' + mono(money(priceIn(C, tv))) + '<br>' +
+      '• Thin and light laptop: ' + mono(money(priceIn(C, lap))) + '<br>' +
+      '• Flagship phone: ' + mono(money(priceIn(C, ph))) + '<br><br>' +
+      'Worth buying before you fly if the number above is positive.';
+  }
+
+  if (/health|insurance|doctor|dentist|medical|hospital/.test(t)) {
+    const ins = ITEMS.find(i => i.n.indexOf('Health insurance') > -1);
+    const doc = ITEMS.find(i => i.n.indexOf('doctor') > -1);
+    const den = ITEMS.find(i => i.n.indexOf('Dental') > -1);
+    return 'Health costs in ' + b(C.city) + ' at a private standard:<br><br>' +
+      '• Insurance: ' + mono(money(priceIn(C, ins)) + '/mo') + '<br>' +
+      '• Doctor visit: ' + mono(money(priceIn(C, doc))) + '<br>' +
+      '• Dental cleaning: ' + mono(money(priceIn(C, den))) + '<br><br>' +
+      'Most nomad visas, including the ' + C.visa.name + ', require cover for the whole stay, so treat the insurance line as compulsory rather than optional.';
+  }
+
+  if (/working day|time zone|timezone|overlap|hours apart|drift/.test(t)) {
+    const drift = tzDrift(r.A, C);
+    return b(C.city) + ' sits roughly ' + mono(drift + ' hour' + (drift === 1 ? '' : 's')) +
+      ' away from ' + r.A.city + '.<br><br>' +
+      (drift <= 3 ? 'Your working day still overlaps with existing clients, so nothing about how you work has to change.'
+       : drift <= 6 ? 'You keep a workable overlap if you start early or finish late. Expect to move recurring calls.'
+       : 'The overlap is thin. This works best if your clients accept written updates instead of live calls.');
+  }
+
+  if (/worth it|verdict|should i move|good move|summary|overall/.test(t)) {
+    const gain = r.arb >= 0;
+    const hitsTarget = r.savings >= prefs.target;
+    const floorOk = !C.visa.income || r.reqGross / 12 >= C.visa.income;
+    return 'Short version for ' + b(r.A.city + ' to ' + C.city) + ':<br><br>' +
+      '• Cost of living ' + b(pct(r.colDelta)) + '<br>' +
+      '• Tax moves to ' + b((C.tax * 100).toFixed(0) + '%') + '<br>' +
+      '• Rate needed ' + b(money(r.reqHourly) + '/hr') + ' against ' + mono(money(r.hourly)) + ' today<br>' +
+      '• Visa income floor ' + (floorOk ? '<span class="text-money-600 font-semibold">cleared</span>' : '<span class="text-amber-600 font-semibold">not cleared</span>') + '<br>' +
+      '• Savings target ' + (hitsTarget ? '<span class="text-money-600 font-semibold">met</span>' : '<span class="text-amber-600 font-semibold">missed</span>') + '<br><br>' +
+      (gain
+        ? 'On these numbers the move buys you ' + b(Math.abs(r.arb).toFixed(0) + '%') +
+          ' of breathing room. The open questions are the ones no calculator answers: language, distance from people you care about, and whether you like the place in February.'
+        : 'On these numbers the move costs you ' + b(Math.abs(r.arb).toFixed(0) + '%') +
+          ' in required income. It can still be the right call, but go in knowing you are paying for something other than money.');
+  }
+
+  if (/internet|wifi|wi-fi|speed|mbps|connect|bandwidth/.test(t)) {
+    return b(C.city) + ' runs about ' + mono(C.net + ' Mbps') + ' on a median fixed line. ' +
+      (C.net >= 150 ? 'That handles simultaneous calls and heavy uploads without much thought.'
+       : C.net >= 90 ? 'Fine for everyday client work, though big file pushes take a while.'
+       : 'Thin for video-heavy days, so most people here keep a mobile data plan as backup.') +
+      '<br><br>Compared with ' + r.A.city + ' at ' + mono(r.A.net + ' Mbps') + ', that is ' +
+      b(pct((C.net - r.A.net) / r.A.net * 100)) + '.';
+  }
+
+  if (/cheap|alternat|nearby|instead|similar|other cit/.test(t)) {
+    const list = C.alts.map(id => {
+      const x = byId(id), cm = monthlyCost(x, r.L).total;
+      return '• ' + b(x.city) + ' (' + x.country + '): ' + mono(money(cm) + '/mo') + ', tax around ' +
+        mono((x.tax * 100).toFixed(0) + '%');
+    }).join('<br>');
+    return 'Three cheaper bases within reach of ' + b(C.city) + ':<br><br>' + list +
+      '<br><br>Click any of them in the panel on the right to load the full comparison.';
+  }
+
+  if (/rate|charge|hourly|price|how much should|quote/.test(t)) {
+    const gain = r.arb >= 0;
+    return 'To hold your lifestyle and keep ' + mono(money(r.savings)) + ' a year in savings, ' + b(r.B.city) +
+      ' needs ' + b(money(r.reqHourly) + '/hr') + ' across ' + mono(Math.round(r.hours).toLocaleString()) + ' billable hours.<br><br>' +
+      (gain
+        ? 'You currently charge ' + mono(money(r.hourly)) + ', so you have ' + b(Math.abs(r.arb).toFixed(0) + '% of headroom') +
+          '. Most people bank it rather than discount, since the arbitrage is the point.'
+        : 'That is ' + b(Math.abs(r.arb).toFixed(0) + '% above') + ' your current ' + mono(money(r.hourly)) +
+          '. Either raise the rate before you move or trim the lifestyle slider.');
+  }
+
+  if (/save|saving|surplus|bank|invest|target/.test(t)) {
+    const gap = r.savings - prefs.target;
+    return 'At this setup you would put away ' + b(money(r.savings)) + ' a year in ' + r.B.city + '.<br><br>' +
+      (gap >= 0
+        ? 'That clears your ' + mono(money(prefs.target)) + ' target by ' + mono(money(gap)) + '.'
+        : 'That is ' + mono(money(Math.abs(gap))) + ' short of your ' + mono(money(prefs.target)) +
+          ' target. Raising the rate to ' + b(money((r.costB.total * 12 + prefs.target) / (1 - r.B.tax) / r.hours) + '/hr') + ' would close it.');
+  }
+
+  if (/cost|rent|live|living|expensive|budget|afford/.test(t)) {
+    const cm = monthlyCost(C, r.L);
+    return 'Monthly in ' + b(C.city) + ' at your lifestyle setting:<br><br>' +
+      '• Rent ' + mono(money(cm.rent)) + '<br>• Everyday costs ' + mono(money(cm.everyday)) +
+      '<br>• Health and transit ' + mono(money(cm.health)) +
+      '<br><br>Total ' + b(money(cm.total)) + ', which is ' +
+      b(pct((cm.total - r.costA.total) / r.costA.total * 100)) + ' against ' + r.A.city + '.';
+  }
+
+  if (/compare|versus|vs|difference|better/.test(t)) {
+    return b(r.A.city) + ' vs ' + b(r.B.city) + ':<br><br>' +
+      '• Monthly cost ' + mono(money(r.costA.total)) + ' → ' + mono(money(r.costB.total)) + ' (' + pct(r.colDelta) + ')<br>' +
+      '• Effective tax ' + mono((r.A.tax * 100).toFixed(0) + '%') + ' → ' + mono((r.B.tax * 100).toFixed(0) + '%') + '<br>' +
+      '• Internet ' + mono(r.A.net + ' Mbps') + ' → ' + mono(r.B.net + ' Mbps') + '<br>' +
+      '• Rate needed ' + mono(money(r.hourly) + '/hr') + ' → ' + mono(money(r.reqHourly) + '/hr') + '<br><br>' +
+      (r.arb >= 0 ? 'Net effect: the move buys you ' + b(Math.abs(r.arb).toFixed(0) + '%') + ' of rate headroom.'
+                  : 'Net effect: the move costs you ' + b(Math.abs(r.arb).toFixed(0) + '%') + ' in required income.');
+  }
+
+  if (/hello|hi\b|hey|help|what can you/.test(t)) {
+    return 'Ask me about tax tiers, visa routes, internet speeds, cheaper nearby cities, or the rate you need to quote. ' +
+      'Everything is computed from your current scenario: ' + b(r.A.city + ' → ' + r.B.city) + '.';
+  }
+
+  return 'I can answer from the built-in dataset on ' + b(CITIES.length + ' cities') +
+    ': tax tiers, visa routes, everyday prices, healthcare, monthly costs, cheaper alternatives, and the rate you need.<br><br>' +
+    'Tap one of the questions below and I will work it out from your current scenario.';
+}
+
+function ask(q) {
+  if (!q.trim()) return;
+  bubble(q, 'user');
+  const t = thinking();
+  setTimeout(() => { t.remove(); bubble(answer(q), 'bot'); }, 420);
+}
+
+function renderChips() {
+  const d = byId(calc.dest).city;
+  const chips = [
+    'What rate should I charge?',
+    'Tax tier in ' + d,
+    'Visa requirements',
+    'What does a weekly shop cost?',
+    'Will my gadgets cost more?',
+    'Healthcare and insurance',
+    'Compare the two cities',
+    'Will I hit my savings target?',
+    'How far does my working day move?',
+    'Internet speed',
+    'Cheaper alternatives',
+    'Is this move worth it?'
+  ];
+  $('#chips').innerHTML = chips.map(c =>
+    '<button class="chip px-3 py-1.5 rounded-full border border-slate-200 dark:border-navy-700 text-[11.5px] font-semibold text-slate-600 dark:text-slate-300 hover:border-brand-600 hover:text-brand-600 dark:hover:text-brand-400 transition">' +
+    c + '</button>').join('');
+  $$('.chip').forEach(el => el.addEventListener('click', () => ask(el.textContent)));
+}
+
+function seedChat() {
+  $('#chatLog').innerHTML = '';
+  const r = result || compute();
+  bubble('You are looking at ' + b(r.A.city + ' → ' + r.B.city) + '. Monthly costs drop ' +
+    b(pct(r.colDelta)) + ' and the effective tax rate moves to ' + mono((r.B.tax * 100).toFixed(0) + '%') +
+    '.<br><br>Ask me anything about the move, or tap a chip below.', 'bot');
+}
+
+/* ── scenarios ────────────────────────────────────────────────── */
+function saveScenario() {
+  const r = compute();
+  const s = {
+    id: 'sc_' + Date.now(),
+    name: r.A.city + ' → ' + r.B.city,
+    origin: calc.origin, dest: calc.dest,
+    income: calc.income, hourly: calc.hourly, lifestyle: calc.lifestyle,
+    reqGross: Math.round(r.reqGross), reqHourly: Math.round(r.reqHourly * 100) / 100,
+    savings: Math.round(r.savings), arb: Math.round(r.arb), monthly: Math.round(r.costB.total),
+    ts: Date.now()
+  };
+  scenarios.unshift(s);
+  Store.set(KEY.scen, scenarios);
+  renderScenarios();
+  toast('Saved ' + s.name, 'fa-bookmark');
+}
+
+function renderScenarios() {
+  const list = $('#savedList');
+  $('#savedCount').textContent = scenarios.length
+    ? scenarios.length + ' scenario' + (scenarios.length === 1 ? '' : 's') + ' in this browser'
+    : 'Nothing saved yet';
+  $('#pvCount').textContent = scenarios.length;
+
+  if (!scenarios.length) {
+    list.innerHTML =
+      '<div class="p-10 text-center"><i class="fa-regular fa-bookmark text-3xl text-slate-300 dark:text-navy-700"></i>' +
+      '<p class="mt-3 text-sm font-semibold">No scenarios yet</p>' +
+      '<p class="text-xs text-slate-500 mt-1">Build a route on the Matrix tab, then save it to compare later.</p></div>';
+    return;
+  }
+
+  list.innerHTML = scenarios.map(s => {
+    const gain = s.arb >= 0;
+    const short = s.savings < prefs.target;
+    return '<div class="p-4 sm:p-5 flex flex-wrap items-center gap-4 hover:bg-slate-50 dark:hover:bg-navy-800/50 transition">' +
+      '<div class="min-w-[180px] flex-1">' +
+        '<div class="font-bold text-[15px]">' + s.name + '</div>' +
+        '<div class="text-[11px] text-slate-500 mt-0.5">Saved ' + new Date(s.ts).toLocaleDateString() +
+        ' · lifestyle ' + s.lifestyle + '</div>' +
+      '</div>' +
+      '<div class="text-right"><div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Rate needed</div>' +
+        '<div class="font-mono font-semibold tnum">' + money(s.reqHourly) + '/hr</div></div>' +
+      '<div class="text-right"><div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Savings</div>' +
+        '<div class="font-mono font-semibold tnum ' + (short ? 'text-amber-600' : 'text-money-600') + '">' + money(s.savings) + '</div></div>' +
+      '<div class="px-2.5 py-1 rounded-lg text-[11px] font-bold ' +
+        (gain ? 'bg-money-600/10 text-money-600' : 'bg-amber-500/10 text-amber-600') + '">' +
+        (gain ? '−' : '+') + Math.abs(s.arb) + '%</div>' +
+      '<div class="flex gap-1.5 ml-auto">' +
+        '<button class="sc-load px-3 py-2 rounded-lg bg-navy-900 dark:bg-brand-600 text-white text-[11px] font-bold hover:opacity-90 transition" data-id="' + s.id + '">Load</button>' +
+        '<button class="sc-del w-9 h-9 rounded-lg border border-slate-200 dark:border-navy-700 text-slate-400 hover:text-red-600 hover:border-red-300 transition" data-id="' + s.id + '" aria-label="Delete scenario"><i class="fa-solid fa-trash-can text-[11px]"></i></button>' +
+      '</div></div>';
+  }).join('');
+
+  $$('.sc-load').forEach(el => el.addEventListener('click', () => {
+    const s = scenarios.find(x => x.id === el.dataset.id);
+    if (!s) return;
+    calc = { origin: s.origin, dest: s.dest, income: s.income, hourly: s.hourly, lifestyle: s.lifestyle };
+    syncInputs();
+    renderMatrix();
+    renderChips();
+    switchTab('matrix');
+    toast('Loaded ' + s.name, 'fa-arrow-rotate-left');
+  }));
+
+  $$('.sc-del').forEach(el => el.addEventListener('click', () => {
+    scenarios = scenarios.filter(x => x.id !== el.dataset.id);
+    Store.set(KEY.scen, scenarios);
+    renderScenarios();
+    toast('Scenario deleted', 'fa-trash-can');
+  }));
+}
+
+/* ── exports ──────────────────────────────────────────────────── */
+function download(name, text, type) {
+  const blob = new Blob([text], { type: type || 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+const csvCell = v => '"' + String(v).replace(/"/g, '""') + '"';
+
+function exportCurrentCsv() {
+  const r = compute(), c = prefs.currency;
+  const rows = [
+    ['Line item', r.A.city, r.B.city, 'Currency'],
+    ['Monthly rent', conv(r.costA.rent).toFixed(0), conv(r.costB.rent).toFixed(0), c],
+    ['Monthly everyday costs', conv(r.costA.everyday).toFixed(0), conv(r.costB.everyday).toFixed(0), c],
+    ['Monthly health and transit', conv(r.costA.health).toFixed(0), conv(r.costB.health).toFixed(0), c],
+    ['Monthly total', conv(r.costA.total).toFixed(0), conv(r.costB.total).toFixed(0), c],
+    ['Effective tax rate', (r.A.tax * 100).toFixed(0) + '%', (r.B.tax * 100).toFixed(0) + '%', ''],
+    ['Annual gross income', conv(r.income).toFixed(0), conv(r.reqGross).toFixed(0), c],
+    ['Hourly rate', conv(r.hourly).toFixed(2), conv(r.reqHourly).toFixed(2), c],
+    ['Annual savings', conv(r.savings).toFixed(0), conv(r.savings).toFixed(0), c],
+    ['Billable hours', Math.round(r.hours), Math.round(r.hours), ''],
+    ['Lifestyle setting', r.L, r.L, ''],
+    ['Median internet (Mbps)', r.A.net, r.B.net, '']
+  ];
+  download('geoearn-' + r.A.id + '-to-' + r.B.id + '.csv',
+    rows.map(row => row.map(csvCell).join(',')).join('\n'), 'text/csv;charset=utf-8');
+  toast('CSV downloaded', 'fa-file-csv');
+}
+
+function exportAllCsv() {
+  if (!scenarios.length) { toast('Nothing saved to export yet', 'fa-circle-info'); return; }
+  const head = ['Scenario', 'From', 'To', 'Current income', 'Current hourly', 'Lifestyle',
+                'Gross needed', 'Hourly needed', 'Monthly cost', 'Annual savings', 'Arbitrage %', 'Saved on'];
+  const rows = scenarios.map(s => [
+    s.name, byId(s.origin).city, byId(s.dest).city,
+    conv(s.income).toFixed(0), conv(s.hourly).toFixed(2), s.lifestyle,
+    conv(s.reqGross).toFixed(0), conv(s.reqHourly).toFixed(2),
+    conv(s.monthly).toFixed(0), conv(s.savings).toFixed(0), s.arb,
+    new Date(s.ts).toISOString().slice(0, 10)
+  ]);
+  download('geoearn-scenarios.csv',
+    [head].concat(rows).map(r => r.map(csvCell).join(',')).join('\n'), 'text/csv;charset=utf-8');
+  toast(scenarios.length + ' scenarios exported', 'fa-table-list');
+}
+
+function exportJson() {
+  download('geoearn-backup.json',
+    JSON.stringify({ prefs, scenarios, calc, exported: new Date().toISOString() }, null, 2),
+    'application/json');
+  toast('Backup downloaded', 'fa-code');
+}
+
+function printSummary() {
+  const r = compute();
+  $('#printMeta').textContent = prefs.name + ' · ' + (prefs.role || 'Freelancer') + ' · ' +
+    r.A.city + ' → ' + r.B.city + ' · ' + new Date().toLocaleDateString();
+  const row = (a, x, y) =>
+    '<tr><td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">' + a + '</td>' +
+    '<td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right;">' + x + '</td>' +
+    '<td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:700;">' + y + '</td></tr>';
+  $('#printBody').innerHTML =
+    '<p style="margin-bottom:10px;">Rate required in ' + r.B.city + ': <strong>' + money(r.reqHourly) +
+    '/hr</strong> (' + money(r.reqGross) + ' gross a year) to preserve ' + money(r.savings) + ' of annual savings.</p>' +
+    '<table style="width:100%;border-collapse:collapse;font-size:12px;">' +
+    '<tr><th style="text-align:left;padding:6px 8px;border-bottom:2px solid #0F172A;">Measure</th>' +
+    '<th style="text-align:right;padding:6px 8px;border-bottom:2px solid #0F172A;">' + r.A.city + '</th>' +
+    '<th style="text-align:right;padding:6px 8px;border-bottom:2px solid #0F172A;">' + r.B.city + '</th></tr>' +
+    row('Monthly rent', money(r.costA.rent), money(r.costB.rent)) +
+    row('Monthly everyday costs', money(r.costA.everyday), money(r.costB.everyday)) +
+    row('Monthly health and transit', money(r.costA.health), money(r.costB.health)) +
+    row('Monthly total', money(r.costA.total), money(r.costB.total)) +
+    row('Effective tax', (r.A.tax * 100).toFixed(0) + '%', (r.B.tax * 100).toFixed(0) + '%') +
+    row('Annual gross', money(r.income), money(r.reqGross)) +
+    row('Hourly rate', money(r.hourly), money(r.reqHourly)) +
+    '</table>' +
+    '<p style="margin-top:10px;font-size:11px;color:#64748b;">Visa route: ' + r.B.visa.name + '. ' + r.B.visa.note +
+    ' Figures are illustrative and not tax advice.</p>';
+  window.print();
+}
+
+
+/* ── living costs ─────────────────────────────────────────────── */
+let livMode = 'price', livFilter = 'all', livQuery = '';
+
+function catOf(id) { return CATS.find(c => c.id === id); }
+
+function adjFor(item, city) {
+  if (!item.a) return 1;
+  return item.a.reduce((mult, spec) => {
+    const name = Array.isArray(spec) ? spec[0] : spec;
+    const pow  = Array.isArray(spec) ? spec[1] : 1;
+    const table = ADJ[name] || {};
+    const v = table[city.id] != null ? table[city.id] : 1;
+    return mult * Math.pow(v, pow);
+  }, 1);
+}
+
+function priceIn(city, item) {
+  const d = drivers(city);
+  let f = 0, w = 0;
+  for (const k in item.m) { f += item.m[k] * d[k]; w += item.m[k]; }
+  return item.p * (f / (w || 1)) * adjFor(item, city);
+}
+
+/* Category movement is now the average of what its own items actually do. */
+function catDelta(catId, A, B) {
+  const items = ITEMS.filter(i => i.c === catId);
+  if (!items.length) return 0;
+  return items.reduce((sum, i) => {
+    const pa = priceIn(A, i);
+    return sum + ((priceIn(B, i) - pa) / pa) * 100;
+  }, 0) / items.length;
+}
+function itemDelta(name, A, B) {
+  const it = ITEMS.find(i => i.n.indexOf(name) > -1);
+  if (!it) return 0;
+  const pa = priceIn(A, it);
+  return ((priceIn(B, it) - pa) / pa) * 100;
+}
+
+function hoursLabel(price, rate) {
+  const h = price / Math.max(1, rate);
+  if (h < 1) return Math.max(1, Math.round(h * 60)) + ' min';
+  if (h < 10) return h.toFixed(1) + ' h';
+  return Math.round(h) + ' h';
+}
+
+function cell(price, rate) {
+  return livMode === 'hours' ? hoursLabel(price, rate) : money(price, price < 20 ? 2 : 0);
+}
+
+function renderLiving() {
+  const r = result || compute();
+  const A = r.A, B = r.B;
+
+  $('#livCity').textContent = B.city;
+  $('#livOriginName').textContent = A.city;
+
+  /* headline numbers */
+  let basketA = 0, basketB = 0, setupA = 0, setupB = 0;
+  ITEMS.forEach(it => {
+    const pa = priceIn(A, it), pb = priceIn(B, it);
+    if (it.b) { basketA += pa * it.b; basketB += pb * it.b; }
+    if (it.s) { setupA += pa * it.s; setupB += pb * it.s; }
+  });
+  const basketDelta = ((basketB - basketA) / basketA) * 100;
+
+  $('#livBasket').textContent = money(basketB);
+  $('#livBasketDelta').textContent = pct(basketDelta) + ' against ' + A.city;
+  $('#livBasketDelta').className = 'text-[11px] font-semibold mt-0.5 ' +
+    (basketDelta <= 0 ? 'text-money-500' : 'text-amber-400');
+  $('#livSetup').textContent = money(setupB);
+
+  /* per category movement, averaged from the items themselves */
+  const moves = CATS.map(c => ({ c, d: catDelta(c.id, A, B) })).sort((x, y) => x.d - y.d);
+  $('#livDrop').textContent = moves[0].c.label.split(' ')[0];
+  $('#livDropVal').textContent = pct(moves[0].d) + ' on ' + moves[0].c.label.toLowerCase();
+  const top = moves[moves.length - 1];
+  $('#livJump').textContent = top.c.label.split(' ')[0];
+  $('#livJumpVal').textContent = pct(top.d) + ' on ' + top.c.label.toLowerCase();
+
+  const tv = itemDelta('television', A, B);
+  const cut = itemDelta('Haircut', A, B);
+  const beer = itemDelta('Domestic beer', A, B);
+  $('#livRule').innerHTML =
+    'Moving to ' + b(B.city) + ' changes the price of a television by ' + b(pct(tv, 0)) +
+    ', because it was built somewhere else and shipped to both cities. A haircut moves ' + b(pct(cut, 0)) +
+    ', because that price is a local wage. A beer moves ' + b(pct(beer, 0)) +
+    ', because duty and licensing are set by the government rather than by the market. ' +
+    'Three prices in the same city, three different answers, which is why one cost of living percentage is never enough.';
+
+  /* category filter chips */
+  const counts = {};
+  CATS.forEach(c => counts[c.id] = ITEMS.filter(i => i.c === c.id).length);
+  const chipCls = on =>
+    'livcat px-3 py-1.5 rounded-full text-[11.5px] font-bold transition border ' +
+    (on ? 'bg-navy-900 dark:bg-brand-600 text-white border-transparent'
+        : 'border-slate-200 dark:border-navy-700 text-slate-500 dark:text-slate-400 hover:border-brand-600 hover:text-brand-600');
+  $('#livCats').innerHTML =
+    '<button class="' + chipCls(livFilter === 'all') + '" data-cat="all">Everything <span class="opacity-60">' + ITEMS.length + '</span></button>' +
+    CATS.map(c => '<button class="' + chipCls(livFilter === c.id) + '" data-cat="' + c.id + '">' +
+      '<i class="fa-solid ' + c.icon + ' mr-1.5 text-[10px]"></i>' + c.label +
+      ' <span class="opacity-60">' + counts[c.id] + '</span></button>').join('');
+  $$('.livcat').forEach(el => el.addEventListener('click', () => { livFilter = el.dataset.cat; renderLiving(); }));
+
+  /* item cards */
+  const q = livQuery.trim().toLowerCase();
+  const shown = CATS.filter(c => livFilter === 'all' || livFilter === c.id)
+    .map(c => ({ c, items: ITEMS.filter(i => i.c === c.id && (!q || i.n.toLowerCase().includes(q))) }))
+    .filter(g => g.items.length);
+
+  if (!shown.length) {
+    $('#livGrid').innerHTML =
+      '<div class="xl:col-span-2 rounded-2xl border border-dashed border-slate-200 dark:border-navy-700 p-12 text-center">' +
+      '<i class="fa-solid fa-magnifying-glass text-2xl text-slate-300 dark:text-navy-700"></i>' +
+      '<p class="mt-3 text-sm font-semibold">Nothing matches that</p>' +
+      '<p class="text-xs text-slate-500 mt-1">Try a shorter word, or pick a category above.</p></div>';
+    return;
+  }
+
+  const head = livMode === 'hours' ? ['Time in ' + A.city, 'Time in ' + B.city] : [A.city, B.city];
+
+  $('#livGrid').innerHTML = shown.map(g => {
+    const d = catDelta(g.c.id, A, B);
+    const tone = d <= -5 ? 'bg-money-600/10 text-money-600'
+              : d >= 5   ? 'bg-amber-500/10 text-amber-600'
+              : 'bg-slate-100 dark:bg-navy-800 text-slate-500';
+    const rows = g.items.map(it => {
+      const pa = priceIn(A, it), pb = priceIn(B, it);
+      const id = ((pb - pa) / pa) * 100;
+      const itone = id <= -1 ? 'text-money-600 dark:text-money-500'
+                  : id >= 1  ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-slate-400';
+      return '<div class="grid grid-cols-[1fr_74px_74px_60px] gap-2 items-center py-2 border-b border-slate-50 dark:border-navy-800/60 last:border-0">' +
+        '<span class="text-[13px] font-medium truncate" title="' + it.n + '">' + it.n + '</span>' +
+        '<span class="font-mono text-[12.5px] text-right text-slate-500 dark:text-slate-400 tnum">' + cell(pa, r.hourly) + '</span>' +
+        '<span class="font-mono text-[12.5px] text-right font-semibold tnum">' + cell(pb, r.reqHourly) + '</span>' +
+        '<span class="font-mono text-[11.5px] text-right tnum ' + itone + '">' + pct(id) + '</span>' +
+      '</div>';
+    }).join('');
+
+    return '<div class="rounded-2xl bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-card overflow-hidden">' +
+      '<div class="px-5 py-4 border-b border-slate-100 dark:border-navy-800 flex items-center gap-3">' +
+        '<div class="w-9 h-9 rounded-xl bg-slate-100 dark:bg-navy-800 grid place-items-center shrink-0">' +
+          '<i class="fa-solid ' + g.c.icon + ' text-brand-600 dark:text-brand-400 text-sm"></i></div>' +
+        '<div class="min-w-0"><div class="font-bold text-[14.5px] truncate">' + g.c.label + '</div>' +
+        '<div class="text-[11px] text-slate-500">' + g.items.length + ' item' + (g.items.length === 1 ? '' : 's') + '</div></div>' +
+        '<span class="ml-auto px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 ' + tone + '">' + pct(d) + '</span>' +
+      '</div>' +
+      '<div class="px-5 pb-3">' +
+        '<div class="grid grid-cols-[1fr_74px_74px_60px] gap-2 text-[9.5px] uppercase tracking-wider text-slate-400 font-bold py-2.5">' +
+          '<span>Item</span><span class="text-right truncate">' + head[0] + '</span>' +
+          '<span class="text-right truncate">' + head[1] + '</span><span class="text-right">Change</span>' +
+        '</div>' + rows +
+      '</div></div>';
+  }).join('');
+}
+
+/* ── theme ────────────────────────────────────────────────────── */
+function applyTheme(dark, animate) {
+  document.documentElement.classList.toggle('dark', dark);
+  $('#themeIcon').className = 'fa-solid ' + (dark ? 'fa-sun' : 'fa-moon') +
+    ' text-slate-600 dark:text-brand-400';
+  $('#prTheme').setAttribute('aria-checked', String(dark));
+  $('#prTheme').className = 'relative w-12 h-7 rounded-full transition ' + (dark ? 'bg-brand-600' : 'bg-slate-200');
+  $('#prThemeKnob').className = 'absolute top-1 left-1 w-5 h-5 rounded-full bg-white shadow transition-transform' +
+    (dark ? ' translate-x-5' : '');
+  if (map) {
+    map.removeLayer(dark ? layerLight : layerDark);
+    (dark ? layerDark : layerLight).addTo(map);
+  }
+  if (chart && animate) renderChart(result || compute());
+  const gi = $('#gateThemeIcon');
+  if (gi) gi.className = 'fa-solid ' + (dark ? 'fa-sun' : 'fa-moon') + ' text-slate-600 dark:text-brand-400';
+  prefs.dark = dark;
+  Store.set(AKEY.theme, dark);
+  if (session) Store.set(KEY.prefs, prefs);
+}
+
+function setLivMode(mode) {
+  livMode = mode === 'hours' ? 'hours' : 'price';
+  $('#modePrice').setAttribute('aria-selected', String(livMode === 'price'));
+  $('#modeHours').setAttribute('aria-selected', String(livMode === 'hours'));
+  renderLiving();
+}
+
+/* ── tabs ─────────────────────────────────────────────────────── */
+function switchTab(name) {
+  $$('.panel').forEach(p => p.classList.toggle('is-active', p.id === 'panel-' + name));
+  $$('[role="tab"]').forEach(t => t.setAttribute('aria-selected', String(t.dataset.tab === name)));
+  $$('[role="tab"]').forEach(t => {
+    const on = t.dataset.tab === name;
+    t.classList.toggle('text-navy-900', on);
+    t.classList.toggle('dark:text-white', on);
+    t.classList.toggle('text-slate-500', !on);
+    t.classList.toggle('dark:text-slate-400', !on);
+  });
+  Store.set(KEY.tab, name);
+  if (name === 'matrix') setTimeout(fitMap, 60);
+  if (name === 'advisor' && !$('#chatLog').children.length) seedChat();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* ── inputs ───────────────────────────────────────────────────── */
+function lifestyleWord(v) {
+  if (v <= 75) return 'Lean';
+  if (v <= 95) return 'Careful';
+  if (v <= 110) return 'Comfortable';
+  if (v <= 135) return 'Generous';
+  return 'Premium';
+}
+
+function paintSlider(el) {
+  const p = ((el.value - el.min) / (el.max - el.min)) * 100;
+  el.style.setProperty('--fill', p + '%');
+}
+
+function syncInputs() {
+  $('#income').value = calc.income;
+  $('#hourly').value = calc.hourly;
+  $('#origin').value = calc.origin;
+  $('#dest').value = calc.dest;
+  $('#lifestyle').value = calc.lifestyle;
+  $('#lifestyleLabel').textContent = lifestyleWord(calc.lifestyle);
+  paintSlider($('#lifestyle'));
+  $('#incomeSym').textContent = cur().sym;
+  $('#rateSym').textContent = cur().sym;
+}
+
+function fillSelects() {
+  const groups = {};
+  CITIES.forEach(c => (groups[c.region] = groups[c.region] || []).push(c));
+  const html = Object.keys(groups).map(region =>
+    '<optgroup label="' + region + '">' +
+    groups[region].map(c => '<option value="' + c.id + '">' + c.city + ' · ' + c.country + '</option>').join('') +
+    '</optgroup>').join('');
+  $('#origin').innerHTML = html;
+  $('#dest').innerHTML = html;
+
+  $('#prCurrency').innerHTML = Object.keys(CURRENCIES).map(k =>
+    '<option value="' + k + '">' + k + ': ' + CURRENCIES[k].name + '</option>').join('');
+
+  const countries = Array.from(new Set(CITIES.map(c => c.country))).sort();
+  $('#prTaxHome').innerHTML = ['No fixed residence'].concat(countries)
+    .map(c => '<option value="' + c + '">' + c + '</option>').join('');
+}
+
+/* ── profile ──────────────────────────────────────────────────── */
+function initials(n) {
+  return (n || 'You').trim().split(/\s+/).slice(0, 2).map(w => w[0].toUpperCase()).join('') || 'Y';
+}
+
+function renderProfile() {
+  $('#chipName').textContent = prefs.name || 'You';
+  $('#chipInitials').textContent = initials(prefs.name);
+  $('#avatar').textContent = initials(prefs.name);
+  $('#pvName').textContent = prefs.name || 'You';
+  $('#pvRole').textContent = prefs.role || 'Freelancer';
+  $('#pvCur').textContent = prefs.currency;
+  $('#pvTax').textContent = prefs.taxHome;
+  $('#pvCount').textContent = scenarios.length;
+
+  const guest = !session || session.guest;
+  const email = guest ? 'Guest session' : session.email;
+  const since = guest || !session.created ? 'Not set' : new Date(session.created).toLocaleDateString();
+  $('#pvEmail').textContent = email;
+  $('#pvSince').textContent = since;
+  $('#menuName').textContent = guest ? 'Guest' : (prefs.name || session.name);
+  $('#menuEmail').textContent = guest ? 'Not signed in' : session.email;
+  $('#acctEmail').textContent = email;
+  $('#acctSince').textContent = since;
+  $('#guestNotice').classList.toggle('hidden', !guest);
+  $('#pwBlock').classList.toggle('hidden', guest);
+  $('#menuSwitch').classList.toggle('hidden', !users().length && guest);
+  $('#btnDeleteAcct').innerHTML = guest
+    ? '<i class="fa-solid fa-trash-can mr-1.5"></i>Erase guest data'
+    : '<i class="fa-solid fa-user-slash mr-1.5"></i>Delete this account';
+  $('#menuLogout').innerHTML = guest
+    ? '<i class="fa-solid fa-arrow-right-from-bracket w-4 mr-1.5"></i>Leave guest mode'
+    : '<i class="fa-solid fa-arrow-right-from-bracket w-4 mr-1.5"></i>Sign out';
+
+  $('#prName').value = prefs.name;
+  $('#prRole').value = prefs.role;
+  $('#prCurrency').value = prefs.currency;
+  $('#prTaxHome').value = prefs.taxHome;
+  $('#prTarget').value = prefs.target;
+  $('#prTargetVal').textContent = money(prefs.target);
+  paintSlider($('#prTarget'));
+  $('#prRound').className = 'relative w-12 h-7 rounded-full transition ' + (prefs.roundUp ? 'bg-brand-600' : 'bg-slate-200');
+  $('#prRound').setAttribute('aria-checked', String(prefs.roundUp));
+  $('#prRoundKnob').className = 'absolute top-1 left-1 w-5 h-5 rounded-full bg-white shadow transition-transform' +
+    (prefs.roundUp ? ' translate-x-5' : '');
+}
+
+function savePrefs() { Store.set(KEY.prefs, prefs); }
+
+/* ── wiring ───────────────────────────────────────────────────── */
+function wire() {
+  $$('[role="tab"]').forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
+
+  $('#themeToggle').addEventListener('click', () => applyTheme(!prefs.dark, true));
+  $('#prTheme').addEventListener('click', () => applyTheme(!prefs.dark, true));
+
+  ['income', 'hourly'].forEach(k => $('#' + k).addEventListener('input', e => {
+    calc[k] = Number(e.target.value) || 0;
+    renderMatrix();
+  }));
+
+  $('#origin').addEventListener('change', e => { calc.origin = e.target.value; renderMatrix(); renderChips(); });
+  $('#dest').addEventListener('change',  e => { calc.dest   = e.target.value; renderMatrix(); renderChips(); });
+
+  $('#btnSwap').addEventListener('click', () => {
+    const t = calc.origin; calc.origin = calc.dest; calc.dest = t;
+    syncInputs(); renderMatrix(); renderChips();
+    toast('Direction flipped', 'fa-arrow-right-arrow-left');
+  });
+
+  $('#lifestyle').addEventListener('input', e => {
+    calc.lifestyle = Number(e.target.value);
+    $('#lifestyleLabel').textContent = lifestyleWord(calc.lifestyle);
+    paintSlider(e.target);
+    renderMatrix();
+  });
+
+  $('#btnReset').addEventListener('click', () => {
+    calc = Object.assign({}, defaults.calc);
+    syncInputs(); renderMatrix(); renderChips();
+    toast('Back to defaults', 'fa-rotate-left');
+  });
+
+  $('#btnFit').addEventListener('click', fitMap);
+  $('#btnSaveQuick').addEventListener('click', saveScenario);
+  $('#btnSaveCurrent').addEventListener('click', saveScenario);
+
+  $('#btnClearChat').addEventListener('click', seedChat);
+
+  $('#livSearch').addEventListener('input', e => { livQuery = e.target.value; renderLiving(); });
+  $('#modePrice').addEventListener('click', () => setLivMode('price'));
+  $('#modeHours').addEventListener('click', () => setLivMode('hours'));
+
+  $('#btnCsvOne').addEventListener('click', exportCurrentCsv);
+  $('#btnCsvAll').addEventListener('click', exportAllCsv);
+  $('#btnJson').addEventListener('click', exportJson);
+  $('#btnPrint').addEventListener('click', printSummary);
+
+  $('#prName').addEventListener('input', e => {
+    prefs.name = e.target.value;
+    if (session && !session.guest) {
+      const list = users(), u = list.find(x => x.id === session.id);
+      if (u) { u.name = e.target.value; saveUsers(list); session.name = u.name; }
+    }
+    renderProfile(); savePrefs();
+  });
+  $('#prRole').addEventListener('input', e => { prefs.role = e.target.value; renderProfile(); savePrefs(); });
+  $('#prTaxHome').addEventListener('change', e => { prefs.taxHome = e.target.value; renderProfile(); savePrefs(); });
+
+  $('#prCurrency').addEventListener('change', e => {
+    prefs.currency = e.target.value; savePrefs();
+    syncInputs(); renderProfile(); renderMatrix(); renderScenarios();
+    toast('Showing amounts in ' + prefs.currency, 'fa-coins');
+  });
+
+  $('#prRound').addEventListener('click', () => {
+    prefs.roundUp = !prefs.roundUp; savePrefs(); renderProfile(); renderMatrix();
+  });
+
+  $('#prTarget').addEventListener('input', e => {
+    prefs.target = Number(e.target.value);
+    $('#prTargetVal').textContent = money(prefs.target);
+    paintSlider(e.target); savePrefs(); renderMatrix(); renderScenarios();
+  });
+
+  $('#btnWipe').addEventListener('click', () => {
+    if (!confirm('Erase every scenario and preference saved under this account? The account itself stays.')) return;
+    Store.del(KEY.prefs); Store.del(KEY.scen); Store.del(KEY.calc); Store.del(KEY.tab);
+    prefs = Object.assign({}, defaults.prefs);
+    calc  = Object.assign({}, defaults.calc);
+    scenarios = [];
+    applyTheme(false, true); syncInputs(); renderProfile(); renderScenarios(); renderMatrix(); renderChips(); seedChat();
+    toast('Scenarios and preferences erased', 'fa-trash-can');
+  });
+
+  $('#btnDemo').addEventListener('click', () => {
+    const demo = [
+      { origin:'new-york', dest:'lisbon',      income:120000, hourly:85,  lifestyle:100 },
+      { origin:'london',   dest:'bangkok',     income:95000,  hourly:70,  lifestyle:95  },
+      { origin:'san-francisco', dest:'medellin', income:165000, hourly:110, lifestyle:110 },
+      { origin:'berlin',   dest:'tbilisi',     income:78000,  hourly:60,  lifestyle:90  }
+    ];
+    const keep = Object.assign({}, calc);
+    demo.forEach(d => { calc = d; saveScenario(); });
+    calc = keep; syncInputs(); renderMatrix();
+    toast('Four sample scenarios added', 'fa-wand-magic-sparkles');
+  });
+
+  /* account menu */
+  $('#acctBtn').addEventListener('click', e => {
+    e.stopPropagation();
+    const hidden = $('#acctMenu').classList.toggle('hidden');
+    $('#acctBtn').setAttribute('aria-expanded', String(!hidden));
+  });
+  $('#acctMenu').addEventListener('click', e => e.stopPropagation());
+  document.addEventListener('click', () => $('#acctMenu').classList.add('hidden'));
+  $('#menuProfile').addEventListener('click', () => { $('#acctMenu').classList.add('hidden'); switchTab('profile'); });
+  $('#menuSwitch').addEventListener('click', () => signOut('signin'));
+  $('#menuLogout').addEventListener('click', () => { const g = !session || session.guest; signOut(); toast(g ? 'Left guest mode' : 'Signed out', 'fa-arrow-right-from-bracket'); });
+
+  /* account panel */
+  $('#btnSignOut').addEventListener('click', () => { const g = !session || session.guest; signOut(); toast(g ? 'Left guest mode' : 'Signed out', 'fa-arrow-right-from-bracket'); });
+  $('#btnChangePw').addEventListener('click', changePassword);
+  $('#btnDeleteAcct').addEventListener('click', deleteAccount);
+  $('#btnUpgrade').addEventListener('click', () => { carryGuestData = true; signOut('signup'); });
+
+  window.addEventListener('resize', () => { if (map) map.invalidateSize(); });
+}
+
+/* ── accounts, stored in this browser only ────────────────────── */
+function users() { return Store.get(AKEY.users, []); }
+function saveUsers(list) { Store.set(AKEY.users, list); }
+
+function randHex(bytes) {
+  const a = new Uint8Array(bytes);
+  if (window.crypto && window.crypto.getRandomValues) window.crypto.getRandomValues(a);
+  else for (let i = 0; i < a.length; i++) a[i] = Math.floor(Math.random() * 256);
+  return Array.from(a).map(x => x.toString(16).padStart(2, '0')).join('');
+}
+
+/* Salted SHA-256 where the browser offers it, with a weak fallback so the
+   app still works from a plain file:// URL in older browsers. */
+async function hashPass(pw, salt) {
+  const input = salt + '::' + pw;
+  if (window.crypto && window.crypto.subtle && window.crypto.subtle.digest) {
+    const buf = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+    return 'sha256:' + Array.from(new Uint8Array(buf)).map(x => x.toString(16).padStart(2, '0')).join('');
+  }
+  let h = 0x811c9dc5, g = 0x9e3779b9;
+  for (let i = 0; i < input.length; i++) {
+    h = Math.imul(h ^ input.charCodeAt(i), 0x01000193) >>> 0;
+    g = Math.imul(g + input.charCodeAt(i) * (i + 7), 0x85ebca6b) >>> 0;
+  }
+  return 'weak:' + h.toString(16) + g.toString(16);
+}
+
+const validEmail = e => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
+let authMode = 'signin';
+
+function authError(msg) {
+  const box = $('#authErr');
+  box.textContent = msg;
+  box.classList.remove('hidden');
+  box.classList.remove('shake');
+  void box.offsetWidth;
+  box.classList.add('shake');
+  return false;
+}
+function clearAuthError() { $('#authErr').classList.add('hidden'); }
+
+function setAuthMode(mode) {
+  authMode = mode === 'signup' ? 'signup' : 'signin';
+  const up = authMode === 'signup';
+  $('#tabSignin').setAttribute('aria-selected', String(!up));
+  $('#tabSignup').setAttribute('aria-selected', String(up));
+  $('#rowName').className = up ? 'block' : 'hidden';
+  $('#rowPass2').className = up ? 'block' : 'hidden';
+  $('#authTitle').textContent = up ? 'Create your account' : 'Welcome back';
+  $('#authSub').textContent = up
+    ? 'It takes a moment and stays on this device.'
+    : 'Pick up where you left off.';
+  $('#authSubmit').textContent = up ? 'Create account' : 'Sign in';
+  $('#authPass').setAttribute('autocomplete', up ? 'new-password' : 'current-password');
+  $('#authPass').placeholder = up ? 'At least 8 characters' : 'Your password';
+  clearAuthError();
+}
+
+function renderAuthAccounts() {
+  const list = users();
+  $('#authAccountsWrap').classList.toggle('hidden', !list.length || authMode === 'signup');
+  $('#authAccounts').innerHTML = list.map(u =>
+    '<button class="acct-pick w-full flex items-center gap-2.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-navy-700 hover:border-brand-600 hover:bg-brand-600/5 transition text-left" data-email="' + u.email + '">' +
+    '<span class="w-7 h-7 rounded-full bg-brand-600 text-white text-[10px] font-bold grid place-items-center shrink-0">' + initials(u.name) + '</span>' +
+    '<span class="min-w-0"><span class="block text-[13px] font-semibold truncate">' + u.name + '</span>' +
+    '<span class="block font-mono text-[10.5px] text-slate-500 truncate">' + u.email + '</span></span></button>'
+  ).join('');
+  $$('.acct-pick').forEach(b => b.addEventListener('click', () => {
+    $('#authEmail').value = b.dataset.email;
+    $('#authPass').value = '';
+    $('#authPass').focus();
+    clearAuthError();
+  }));
+}
+
+async function doSignup() {
+  clearAuthError();
+  const name  = $('#authName').value.trim();
+  const email = $('#authEmail').value.trim().toLowerCase();
+  const pw    = $('#authPass').value;
+  const pw2   = $('#authPass2').value;
+
+  if (name.length < 2)   return authError('Enter the name you want on the account.');
+  if (!validEmail(email)) return authError('That email address does not look right.');
+  if (pw.length < 8)     return authError('Passwords need at least 8 characters.');
+  if (pw !== pw2)        return authError('The two passwords do not match.');
+
+  const list = users();
+  if (list.some(u => u.email === email)) return authError('This browser already has an account with that email.');
+
+  const salt = randHex(16);
+  const u = { id:'u_' + Date.now().toString(36) + randHex(3), name, email, salt,
+              hash: await hashPass(pw, salt), created: Date.now() };
+  list.push(u);
+  saveUsers(list);
+
+  const carried = carryGuestData ? {
+    prefs: Store.get('geoearn.guest.prefs', null),
+    scen:  Store.get('geoearn.guest.scenarios', null),
+    calc:  Store.get('geoearn.guest.calc', null)
+  } : null;
+
+  session = { id:u.id, name:u.name, email:u.email, created:u.created };
+  if (carried) {
+    if (carried.prefs) Store.set(KEY.prefs, Object.assign({}, carried.prefs, { name }));
+    if (carried.scen)  Store.set(KEY.scen, carried.scen);
+    if (carried.calc)  Store.set(KEY.calc, carried.calc);
+  }
+  if (carried) ['prefs','scenarios','calc','tab'].forEach(k => Store.del('geoearn.guest.' + k));
+  carryGuestData = false;
+  Store.set(AKEY.session, { id:u.id });
+  startApp(session);
+  toast('Account created. Welcome, ' + name.split(' ')[0], 'fa-user-check');
+}
+
+async function doSignin() {
+  clearAuthError();
+  const email = $('#authEmail').value.trim().toLowerCase();
+  const pw = $('#authPass').value;
+  const u = users().find(x => x.email === email);
+  if (!u) return authError('No account on this browser uses that email.');
+  if (await hashPass(pw, u.salt) !== u.hash) return authError('That password does not match.');
+
+  Store.set(AKEY.session, { id:u.id });
+  startApp({ id:u.id, name:u.name, email:u.email, created:u.created });
+  toast('Signed in as ' + u.name.split(' ')[0], 'fa-circle-check');
+}
+
+function continueAsGuest() {
+  Store.set(AKEY.session, { guest:true });
+  startApp({ guest:true, name:'Guest', email:'' });
+  toast('Browsing as a guest', 'fa-user');
+}
+
+function showGate(mode) {
+  setAuthMode(mode || 'signin');
+  renderAuthAccounts();
+  $('#authGate').classList.remove('hidden');
+  document.body.classList.add('overflow-hidden');
+  $('#authPass').value = '';
+  $('#authPass2').value = '';
+  setTimeout(() => { const f = $(authMode === 'signup' ? '#authName' : '#authEmail'); if (f && f.focus) f.focus(); }, 120);
+}
+
+function hideGate() {
+  $('#authGate').classList.add('hidden');
+  document.body.classList.remove('overflow-hidden');
+}
+
+function signOut(mode) {
+  Store.del(AKEY.session);
+  session = null;
+  scenarios = [];
+  $('#chatLog').innerHTML = '';
+  $('#acctMenu').classList.add('hidden');
+  showGate(mode || (users().length ? 'signin' : 'signup'));
+}
+
+async function changePassword() {
+  if (!session || session.guest) return;
+  const cur = $('#pwCurrent').value, next = $('#pwNew').value;
+  const list = users(), u = list.find(x => x.id === session.id);
+  if (!u) return;
+  if (await hashPass(cur, u.salt) !== u.hash) { toast('Current password is wrong', 'fa-circle-exclamation'); return; }
+  if (next.length < 8) { toast('New password needs 8 characters', 'fa-circle-exclamation'); return; }
+  u.salt = randHex(16);
+  u.hash = await hashPass(next, u.salt);
+  saveUsers(list);
+  $('#pwCurrent').value = ''; $('#pwNew').value = '';
+  toast('Password updated', 'fa-key');
+}
+
+function deleteAccount() {
+  if (!session) return;
+  const guest = !!session.guest;
+  const label = guest ? 'the guest data on this browser' : session.email;
+  if (!confirm('Delete ' + label + ' and every scenario saved under it? This cannot be undone.')) return;
+  Store.del(KEY.prefs); Store.del(KEY.scen); Store.del(KEY.calc); Store.del(KEY.tab);
+  if (!guest) saveUsers(users().filter(u => u.id !== session.id));
+  Store.del(AKEY.session);
+  session = null;
+  scenarios = [];
+  prefs = Object.assign({}, defaults.prefs);
+  calc  = Object.assign({}, defaults.calc);
+  $('#chatLog').innerHTML = '';
+  showGate(users().length ? 'signin' : 'signup');
+  toast(guest ? 'Guest data erased' : 'Account deleted', 'fa-user-slash');
+}
+
+function wireAuth() {
+  $('#tabSignin').addEventListener('click', () => { setAuthMode('signin'); renderAuthAccounts(); });
+  $('#tabSignup').addEventListener('click', () => { setAuthMode('signup'); renderAuthAccounts(); });
+  $('#authSubmit').addEventListener('click', () => (authMode === 'signup' ? doSignup() : doSignin()));
+  $('#btnGuest').addEventListener('click', continueAsGuest);
+  $('#gateTheme').addEventListener('click', () => applyTheme(!document.documentElement.classList.contains('dark'), false));
+  $('#btnPeek').addEventListener('click', () => {
+    const f = $('#authPass');
+    const show = f.type === 'password';
+    f.type = show ? 'text' : 'password';
+    $('#btnPeek').innerHTML = '<i class="fa-regular ' + (show ? 'fa-eye-slash' : 'fa-eye') + ' text-xs"></i>';
+  });
+  ['#authName', '#authEmail', '#authPass', '#authPass2'].forEach(sel =>
+    $(sel).addEventListener('keydown', e => {
+      if (e.key === 'Enter') (authMode === 'signup' ? doSignup() : doSignin());
+      else clearAuthError();
+    }));
+}
+
+/* Data saved before accounts existed becomes the guest slot. */
+function migrateLegacy() {
+  if (Store.get(AKEY.moved, false)) return;
+  const p = Store.get('geoearn.prefs', null),
+        c = Store.get('geoearn.calc', null),
+        sc = Store.get('geoearn.scenarios', null),
+        tb = Store.get('geoearn.tab', null);
+  if (p)  Store.set('geoearn.guest.prefs', p);
+  if (c)  Store.set('geoearn.guest.calc', c);
+  if (sc) Store.set('geoearn.guest.scenarios', sc);
+  if (tb) Store.set('geoearn.guest.tab', tb);
+  ['geoearn.prefs', 'geoearn.calc', 'geoearn.scenarios', 'geoearn.tab'].forEach(Store.del);
+  Store.set(AKEY.moved, true);
+}
+
+/* ── boot ─────────────────────────────────────────────────────── */
+function startApp(sess) {
+  session = sess;
+  loadUserData();
+  if (!CITIES.some(c => c.id === calc.origin)) calc.origin = defaults.calc.origin;
+  if (!CITIES.some(c => c.id === calc.dest))   calc.dest   = defaults.calc.dest;
+
+  hideGate();
+  syncInputs();
+  renderProfile();
+  applyTheme(!!prefs.dark, appReady);
+  initMap();
+  renderMatrix();
+  renderScenarios();
+  renderChips();
+  seedChat();
+  if (!appReady) { wire(); appReady = true; }
+
+  $('#storeState').textContent = Store.ok ? 'Active' : 'Session only';
+  const last = Store.get(KEY.tab, 'matrix');
+  switchTab(['matrix', 'living', 'advisor', 'saved', 'mission', 'profile'].includes(last) ? last : 'matrix');
+  setTimeout(fitMap, 200);
+}
+
+function init() {
+  fillSelects();
+  $('#cityCount').textContent = CITIES.length;
+  $('#missCities').textContent = CITIES.length;
+  $('#missItems').textContent = ITEMS.length;
+  wireAuth();
+  migrateLegacy();
+
+  const sysDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  applyTheme(Store.get(AKEY.theme, sysDark), false);
+
+  const s = Store.get(AKEY.session, null);
+  if (s && s.guest) return startApp({ guest:true, name:'Guest', email:'' });
+  if (s && s.id) {
+    const u = users().find(x => x.id === s.id);
+    if (u) return startApp({ id:u.id, name:u.name, email:u.email, created:u.created });
+  }
+  showGate(users().length ? 'signin' : 'signup');
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
